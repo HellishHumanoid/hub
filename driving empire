@@ -1,0 +1,1397 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+   Name = "Rafso Driving Empire",
+   LoadingTitle = "Enjoy it.",
+   LoadingSubtitle = "by Rafso",
+   ConfigurationSaving = {
+      Enabled = true,
+      FolderName = nil,
+      FileName = "Auto-ATM"
+   },
+   Discord = {
+      Enabled = false,
+      Invite = "noinvitelink",
+      RememberJoins = true
+   },
+   KeySystem = false,
+})
+
+-- DELETE BOATS DEALERSHIP FOLDER ON EXECUTION
+pcall(function()
+    local boatsFolder = game:GetService("Workspace").Game.Dealerships.Dealerships:FindFirstChild("Boats")
+    if boatsFolder then
+        boatsFolder:Destroy()
+        print("Boats dealership folder deleted successfully!")
+    end
+end)
+
+-- ==================== GAMEPASS CHECK ====================
+local hasCriminalPass = false
+
+local function checkCriminalPass()
+    local success, result = pcall(function()
+        local player = game:GetService("Players").LocalPlayer
+        local playerGui = player:WaitForChild("PlayerGui", 10)
+        
+        -- Use the player's username for the Stats GUI name
+        local statsGuiName = player.Name .. "'s Stats"
+        local statsGui = playerGui:WaitForChild(statsGuiName, 10)
+        
+        if statsGui then
+            local jobs = statsGui:WaitForChild("Jobs", 5)
+            
+            if jobs then
+                local hasCriminalPassValue = jobs:WaitForChild("HasCriminalPass", 5)
+                
+                if hasCriminalPassValue then
+                    return hasCriminalPassValue.Value == true
+                end
+            end
+        end
+        return false
+    end)
+    
+    if success then
+        hasCriminalPass = result
+    else
+        hasCriminalPass = false
+    end
+    
+    return hasCriminalPass
+end
+
+-- Check for gamepass IMMEDIATELY when script loads (blocking) - ONLY ONCE
+task.wait(3) -- Wait 3 seconds for PlayerGui to fully load
+checkCriminalPass()
+print("Criminal Pass Check Complete - Has Pass:", hasCriminalPass)
+
+-- ==================== ANTI-AFK SYSTEM ====================
+local antiAFKRunning = false
+
+local function startAntiAFK()
+    if antiAFKRunning then return end
+    antiAFKRunning = true
+    
+    task.spawn(function()
+        local VIM = game:GetService("VirtualInputManager")
+        
+        while antiAFKRunning do
+            -- Wait 5 minutes (300 seconds)
+            task.wait(300)
+            
+            -- Send a mouse click
+            VIM:SendMouseButtonEvent(0, 0, 0, true, game, 1)
+            task.wait(0.1)
+            VIM:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+            
+            print("Anti-AFK: Click sent")
+        end
+    end)
+    
+    print("Anti-AFK: Started - Clicking every 5 minutes")
+end
+
+local function stopAntiAFK()
+    antiAFKRunning = false
+    print("Anti-AFK: Stopped")
+end
+
+-- Start Anti-AFK automatically when script loads
+startAntiAFK()
+
+-- ==================== CAMERA DOWN SYSTEM ====================
+local cameraDownRunning = false
+local cameraConnection = nil
+local originalCameraType = nil
+
+local function startCameraDown()
+    if cameraDownRunning then return end
+    cameraDownRunning = true
+    
+    local camera = workspace.CurrentCamera
+    local player = game:GetService("Players").LocalPlayer
+    
+    -- Save original camera type
+    originalCameraType = camera.CameraType
+    
+    -- Disconnect old connection if exists
+    if cameraConnection then
+        cameraConnection:Disconnect()
+    end
+    
+    -- Use a much gentler approach - just tilt the camera down
+    cameraConnection = game:GetService("RunService").RenderStepped:Connect(function()
+        if cameraDownRunning and player.Character then
+            local humanoidRootPart = player.Character:FindFirstChild("HumanoidRootPart")
+            if humanoidRootPart and camera.CameraType == Enum.CameraType.Custom then
+                -- Position camera above and slightly behind for 80 degree angle
+                local camPos = humanoidRootPart.Position + Vector3.new(0, 20, 3.5)
+                
+                -- Look at a point slightly below character for 80 degree angle
+                local lookAtPos = humanoidRootPart.Position + Vector3.new(0, -2, 0)
+                
+                -- Set camera to 80 degree downward angle
+                camera.CFrame = CFrame.new(camPos, lookAtPos)
+            end
+        end
+    end)
+    
+    print("Camera Down: Started - Camera angled down")
+end
+
+local function stopCameraDown()
+    cameraDownRunning = false
+    
+    if cameraConnection then
+        cameraConnection:Disconnect()
+        cameraConnection = nil
+    end
+    
+    print("Camera Down: Stopped - Camera control returned to player")
+end
+
+-- ==================== REST OF SCRIPT ====================
+
+local MainTab = Window:CreateTab("Auto-ATM", 4483362458)
+
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+local humanoid = character:WaitForChild("Humanoid")
+
+-- Sell timer variables
+local lastSellTime = tick()
+local sellInterval = 600 -- 10 minutes in seconds
+local sellLocation = Vector3.new(-2544, 26, 4030) -- Sell location coordinate
+
+-- Death detection and restart
+local function setupDeathDetection()
+    humanoid.Died:Connect(function()
+        StatusLabel:Set("Status: Character died! Waiting to respawn...")
+        
+        -- Wait for respawn
+        character = player.Character or player.CharacterAdded:Wait()
+        humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+        humanoid = character:WaitForChild("Humanoid")
+        
+        -- Disable any lingering float
+        disableFloat()
+        
+        -- Wait a moment for character to stabilize
+        task.wait(2)
+        
+        StatusLabel:Set("Status: Respawned! Restarting from ATM 1...")
+        
+        -- Restart the script if still enabled
+        if autoATMEnabled then
+            isRunning = false
+            task.wait(0.5)
+            task.spawn(runAutoATM)
+        end
+    end)
+end
+
+-- Function to get all handle tools
+local function GetHandleTools(p)
+    p = p or player
+    local r = {}
+    for _, v in ipairs(p.Character and p.Character:GetChildren() or {}) do
+        if v:IsA("BackpackItem") and v:FindFirstChild("Handle") then
+            r[#r + 1] = v
+        end
+    end
+    for _, v in ipairs(p.Backpack:GetChildren()) do
+        if v:IsA("BackpackItem") and v:FindFirstChild("Handle") then
+            r[#r + 1] = v
+        end
+    end
+    return r
+end
+
+-- DEDICATED UNEQUIP LOOP - RUNS CONSTANTLY
+local unequipLoopRunning = false
+local function startUnequipLoop()
+    unequipLoopRunning = true
+    
+    task.spawn(function()
+        while unequipLoopRunning and autoATMEnabled do
+            -- Get current character EVERY LOOP
+            local char = player.Character
+            if char then
+                local hum = char:FindFirstChildOfClass('Humanoid')
+                if hum then
+                    pcall(function()
+                        hum:UnequipTools()
+                    end)
+                end
+                
+                -- Also delete CriminalMoneyBag
+                for _, item in pairs(char:GetChildren()) do
+                    if item.Name == "CriminalMoneyBag" then
+                        pcall(function()
+                            item:Destroy()
+                        end)
+                    end
+                end
+            end
+            
+            task.wait(0.01) -- Loop every 0.01 seconds - SUPER FAST
+        end
+    end)
+end
+
+local function stopUnequipLoop()
+    unequipLoopRunning = false
+end
+
+-- Function to setup auto-unequip monitoring
+local autoUnequipHeartbeat = nil
+local function setupAutoUnequip()
+    -- Disconnect old connection if exists
+    if autoUnequipHeartbeat then
+        autoUnequipHeartbeat:Disconnect()
+    end
+    
+    -- Start the dedicated unequip loop
+    startUnequipLoop()
+    
+    -- Check EVERY FRAME and force unequip
+    autoUnequipHeartbeat = game:GetService("RunService").Heartbeat:Connect(function()
+        if autoATMEnabled then
+            -- Get current character
+            local char = player.Character
+            if not char then return end
+            
+            local hum = char:FindFirstChildOfClass('Humanoid')
+            if hum then
+                pcall(function()
+                    hum:UnequipTools()
+                end)
+            end
+            
+            -- DELETE CriminalMoneyBag
+            for _, item in pairs(char:GetChildren()) do
+                if item.Name == "CriminalMoneyBag" then
+                    pcall(function()
+                        item:Destroy()
+                    end)
+                end
+            end
+        end
+    end)
+end
+
+-- Function to disable auto-unequip
+local function disableAutoUnequip()
+    stopUnequipLoop()
+    if autoUnequipHeartbeat then
+        autoUnequipHeartbeat:Disconnect()
+        autoUnequipHeartbeat = nil
+    end
+end
+
+-- ATM Coordinates (all 48 locations)
+local atmCoordinates = {
+    Vector3.new(-1053.50, 9.10, 5045.60),
+    Vector3.new(-1696.70, 12.30, 4920.00),
+    Vector3.new(-1346.90, 11.80, 4332.50),
+    Vector3.new(-1892.30, 12.50, 4862.80),
+    Vector3.new(-2172.50, 11.90, 4740.90),
+    Vector3.new(-2225.50, 12.40, 4091.50),
+    Vector3.new(-859.40, 12.40, 3780.80),
+    Vector3.new(-1206.80, 12.40, 3699.00),
+    Vector3.new(-2085.00, 12.40, 3411.30),
+    Vector3.new(-2043.80, 12.40, 3223.40),
+    Vector3.new(-2081.50, 12.40, 2822.90),
+    Vector3.new(-1992.80, 12.40, 2693.80),
+    Vector3.new(-1894.20, 12.40, 2706.20),
+    Vector3.new(-1600.80, 11.80, 2804.30),
+    Vector3.new(-2556.30, 27.60, 2477.20),
+    Vector3.new(-1415.00, 11.60, 2840.70),
+    Vector3.new(-1681.80, 12.50, 1773.50),
+    Vector3.new(-1249.60, 12.50, 2329.80),
+    Vector3.new(-1201.10, 13.20, 2548.10),
+    Vector3.new(-1129.90, 12.40, 3246.60),
+    Vector3.new(-815.80, 12.50, 3097.10),
+    Vector3.new(-356.30, 12.40, 3194.30),
+    Vector3.new(-461.40, 12.40, 3672.60),
+    Vector3.new(145.60, 12.20, 3658.00),
+    Vector3.new(134.10, 26.60, 2186.60),
+    Vector3.new(992.40, 33.10, 1796.10),
+    Vector3.new(595.90, 33.10, 1622.70),
+    Vector3.new(237.10, 9.50, 815.90),
+    Vector3.new(269.30, 33.00, 478.40),
+    Vector3.new(-372.70, 23.70, 63.70),
+    Vector3.new(-611.40, 23.70, -31.70),
+    Vector3.new(-271.80, 23.70, -235.40),
+    Vector3.new(-97.70, 23.60, -108.00),
+    Vector3.new(-524.80, 24.70, -432.00),
+    Vector3.new(-251.60, 24.70, -475.50),
+    Vector3.new(-976.20, 23.50, -585.40),
+    Vector3.new(-631.20, 23.00, -727.10),
+    Vector3.new(-1203.20, 23.50, -1144.20),
+    Vector3.new(-1115.20, 23.50, -833.90),
+    Vector3.new(-576.20, 23.50, -972.90),
+    Vector3.new(93.00, 23.70, -984.10),
+    Vector3.new(195.20, 33.00, -15.70),
+    Vector3.new(399.00, 23.70, -978.10),
+    Vector3.new(591.90, 33.00, 189.40),
+    Vector3.new(886.70, 33.00, -86.30),
+    Vector3.new(881.60, 33.00, 187.80),
+    Vector3.new(-374.70, 14.70, -1815.50),
+    Vector3.new(-967.40, 23.60, -1730.40)
+}
+
+-- Variables
+local autoATMEnabled = false
+local isRunning = false
+local atmProcessed = 0
+local atmSkipped = 0
+
+-- Status Label
+local StatusLabel = MainTab:CreateLabel("Status: Idle")
+local ProgressLabel = MainTab:CreateLabel("Progress: 0/48 ATMs processed")
+local SellTimerLabel = MainTab:CreateLabel("Next Sell: 10:00")
+
+-- Add gamepass status label
+local GamepassLabel = MainTab:CreateLabel(hasCriminalPass and "Criminal Pass: ✅ Detected (1s)" or "Criminal Pass: ❌ Not Found (2.6s)")
+
+-- Reset status to Idle when script loads
+task.spawn(function()
+    task.wait(0.1)
+    StatusLabel:Set("Status: Idle")
+end)
+
+-- Function to update sell timer display
+local function updateSellTimer()
+    task.spawn(function()
+        while autoATMEnabled do
+            local timeElapsed = tick() - lastSellTime
+            local timeRemaining = sellInterval - timeElapsed
+            
+            if timeRemaining > 0 then
+                local minutes = math.floor(timeRemaining / 60)
+                local seconds = math.floor(timeRemaining % 60)
+                SellTimerLabel:Set(string.format("Next Sell: %02d:%02d", minutes, seconds))
+            else
+                SellTimerLabel:Set("Next Sell: READY")
+            end
+            
+            task.wait(1)
+        end
+        SellTimerLabel:Set("Next Sell: --:--")
+    end)
+end
+
+-- Function to freeze character
+local function freezeCharacter(freeze)
+    -- Always get fresh character references
+    local char = player.Character
+    if not char then return end
+    
+    local root = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChild("Humanoid")
+    
+    if not root or not hum then return end
+    
+    root.Anchored = freeze
+    if freeze then
+        hum.WalkSpeed = 0
+        hum.JumpPower = 0
+    else
+        hum.WalkSpeed = 16
+        hum.JumpPower = 50
+    end
+end
+
+-- Function to completely unfreeze character (with physics reset)
+local function completelyUnfreezeCharacter()
+    -- Update character reference
+    character = player.Character
+    if not character then return end
+    
+    humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+    humanoid = character:FindFirstChild("Humanoid")
+    
+    if not humanoidRootPart or not humanoid then return end
+    
+    -- Unfreeze all body parts
+    for _, part in pairs(character:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.Anchored = false
+            part.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+            part.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+        end
+    end
+    
+    -- Reset humanoid properties
+    humanoid.WalkSpeed = 16
+    humanoid.JumpPower = 50
+    humanoid.AutoRotate = true
+    humanoid.Sit = false
+    
+    -- Make sure HumanoidRootPart is unfrozen
+    humanoidRootPart.Anchored = false
+    humanoidRootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+    humanoidRootPart.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+    
+    -- Small wait to let physics settle
+    task.wait(0.1)
+end
+
+-- Function to teleport properly
+local function properTeleport(targetPos)
+    -- Get fresh character references
+    local char = player.Character
+    if not char then return end
+    
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    
+    -- Teleport character
+    root.CFrame = CFrame.new(targetPos)
+    
+    -- Reset all velocities to prevent physics issues
+    for _, part in pairs(char:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+            part.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+        end
+    end
+    
+    -- Small wait to stabilize
+    task.wait(0.05)
+end
+
+-- Function to enable floating (zero gravity)
+local floatBodyVelocity = nil
+local function enableFloat()
+    -- Get fresh character references
+    local char = player.Character
+    if not char then return end
+    
+    local root = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChild("Humanoid")
+    if not root or not hum then return end
+    
+    -- Remove old float if exists
+    if floatBodyVelocity then
+        floatBodyVelocity:Destroy()
+    end
+    
+    -- Create BodyVelocity for zero gravity floating
+    floatBodyVelocity = Instance.new("BodyVelocity")
+    floatBodyVelocity.MaxForce = Vector3.new(0, math.huge, 0) -- Only affect Y axis
+    floatBodyVelocity.Velocity = Vector3.new(0, 0, 0) -- No movement
+    floatBodyVelocity.Parent = root
+    
+    -- Disable humanoid gravity
+    hum.PlatformStand = true
+end
+
+-- Function to disable floating
+local function disableFloat()
+    if floatBodyVelocity then
+        floatBodyVelocity:Destroy()
+        floatBodyVelocity = nil
+    end
+    
+    -- Re-enable humanoid gravity
+    local char = player.Character
+    if char then
+        local hum = char:FindFirstChild("Humanoid")
+        if hum then
+            hum.PlatformStand = false
+        end
+    end
+end
+
+-- Function to enable noclip (disable collision)
+local function enableNoclip()
+    local char = player.Character
+    if not char then return end
+    
+    -- Disable CanCollide on all parts
+    for _, part in pairs(char:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = false
+        end
+    end
+end
+
+-- Function to disable noclip (re-enable collision)
+local function disableNoclip()
+    local char = player.Character
+    if not char then return end
+    
+    -- Re-enable CanCollide on all parts except specific ones
+    for _, part in pairs(char:GetDescendants()) do
+        if part:IsA("BasePart") then
+            -- Don't re-enable collision on accessories
+            if not part.Parent:IsA("Accessory") then
+                part.CanCollide = true
+            end
+        end
+    end
+end
+
+-- CONTINUOUS NOCLIP LOOP - Keeps noclip active at all times when Auto-ATM is on
+local noclipLoopRunning = false
+local function startNoclipLoop()
+    noclipLoopRunning = true
+    
+    task.spawn(function()
+        while noclipLoopRunning and autoATMEnabled do
+            -- Get current character EVERY LOOP
+            local char = player.Character
+            if char then
+                -- Disable CanCollide on all parts continuously
+                for _, part in pairs(char:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = false
+                    end
+                end
+            end
+            
+            task.wait(0.1) -- Loop every 0.1 seconds to maintain noclip
+        end
+    end)
+end
+
+local function stopNoclipLoop()
+    noclipLoopRunning = false
+    -- Re-enable collision after stopping
+    disableNoclip()
+end
+
+-- Safe spot coordinate
+local safeTeleportSpot = Vector3.new(-773, 99999, -1283)
+
+-- Function to find closest ATM spawner to coordinate
+local function findATMSpawnerAtCoordinate(targetPos)
+    local spawners = Workspace.Game.Jobs.CriminalATMSpawners:GetChildren()
+    local closestSpawner = nil
+    local closestDistance = math.huge
+    
+    for _, spawner in pairs(spawners) do
+        if spawner.Name == "CriminalATMSpawner" then
+            local spawnerPos = spawner:IsA("Model") and spawner:GetPivot().Position or spawner.Position
+            local distance = (spawnerPos - targetPos).Magnitude
+            
+            if distance < closestDistance and distance < 50 then -- Within 50 studs
+                closestDistance = distance
+                closestSpawner = spawner
+            end
+        end
+    end
+    
+    return closestSpawner
+end
+
+-- Function to check if ATM has enabled ProximityPrompt
+local function checkATMPrompt(spawner)
+    local criminalATM = spawner:FindFirstChild("CriminalATM")
+    if not criminalATM then
+        return nil
+    end
+    
+    local attachment = criminalATM:FindFirstChild("Attachment")
+    if not attachment then
+        return nil
+    end
+    
+    local proximityPrompt = attachment:FindFirstChild("ProximityPrompt")
+    if proximityPrompt and proximityPrompt.Enabled then
+        return proximityPrompt
+    end
+    
+    return nil
+end
+
+-- SELL FUNCTION - Completely stops ATM farming and sells
+local function performSell()
+    StatusLabel:Set("Status: ⏰ TIME TO SELL! Stopping all ATM farming...")
+    
+    -- Completely unfreeze character and disable float
+    completelyUnfreezeCharacter()
+    disableFloat()
+    
+    -- Teleport to sell location 3 times with 1 second delay
+    for i = 1, 3 do
+        StatusLabel:Set(string.format("Status: 💰 SELLING - Teleport %d/3 to sell location...", i))
+        properTeleport(sellLocation)
+        task.wait(1) -- 1 second delay between each teleport
+    end
+    
+    -- After 3 teleports, wait a bit and update status
+    StatusLabel:Set("Status: ✅ Sell complete! Resuming ATM farming in 3 seconds...")
+    task.wait(3)
+    
+    -- Reset the sell timer
+    lastSellTime = tick()
+    
+    StatusLabel:Set("Status: 🔄 Resuming ATM farming...")
+end
+
+-- Main Auto-ATM Function
+local function runAutoATM()
+    if isRunning then return end
+    isRunning = true
+    
+    -- Reset sell timer on start
+    lastSellTime = tick()
+    
+    -- Setup death detection
+    setupDeathDetection()
+    
+    -- Setup aggressive auto-unequip monitoring
+    setupAutoUnequip()
+    
+    -- Start camera down system
+    startCameraDown()
+    
+    -- START CONTINUOUS NOCLIP LOOP - Keeps noclip active at all times
+    startNoclipLoop()
+    
+    -- Start sell timer display
+    updateSellTimer()
+    
+    -- Loop infinitely for overnight farming
+    while autoATMEnabled do
+        atmProcessed = 0
+        atmSkipped = 0
+        
+        StatusLabel:Set("Status: Starting Auto-ATM run...")
+        
+        -- Loop through all ATMs ONCE before restarting
+        for cycle = 1, 1 do
+            StatusLabel:Set(string.format("Status: Starting ATM run...", cycle))
+            
+            for i, coord in ipairs(atmCoordinates) do
+                if not autoATMEnabled then
+                    StatusLabel:Set("Status: Stopped by user")
+                    break
+                end
+            
+            -- CHECK IF IT'S TIME TO SELL (every 10 minutes)
+            local currentTime = tick()
+            if (currentTime - lastSellTime) >= sellInterval then
+                performSell() -- This will COMPLETELY STOP and teleport 3 times to sell
+            end
+            
+            StatusLabel:Set(string.format("Status: Checking ATM %d/48...", i))
+            ProgressLabel:Set(string.format("Progress: %d/48 | Processed: %d | Skipped: %d", i, atmProcessed, atmSkipped))
+            
+            -- Teleport to ATM location (15 studs above while searching)
+            StatusLabel:Set(string.format("Status: ATM %d - Teleporting to location...", i))
+            local searchCoord = coord + Vector3.new(0, 15, 0) -- 15 studs above while searching
+            properTeleport(searchCoord)
+            
+            task.wait(0.1) -- Wait time to stabilize and prevent death
+            
+            -- Quick check: Find the spawner at this location
+            local spawner = findATMSpawnerAtCoordinate(coord)
+            
+            if not spawner then
+                StatusLabel:Set(string.format("Status: ATM %d - No spawner, skipping fast...", i))
+                atmSkipped = atmSkipped + 1
+                continue
+            end
+            
+            -- Quick check: Does it have CriminalATM model?
+            local criminalATM = spawner:FindFirstChild("CriminalATM")
+            if not criminalATM then
+                StatusLabel:Set(string.format("Status: ATM %d - No ATM model, skipping fast...", i))
+                atmSkipped = atmSkipped + 1
+                continue
+            end
+            
+            -- Check if ATM has enabled ProximityPrompt
+            local prompt = checkATMPrompt(spawner)
+            
+            if not prompt then
+                StatusLabel:Set(string.format("Status: ATM %d - No enabled prompt, skipping fast...", i))
+                atmSkipped = atmSkipped + 1
+                continue
+            end
+            
+            -- Valid ATM found! Get the ATM part inside the CriminalATM model
+            StatusLabel:Set(string.format("Status: ATM %d - Valid ATM found! Getting ATM part...", i))
+            
+            -- Find the "ATM" part inside the CriminalATM model
+            local atmPart = criminalATM:FindFirstChild("ATM")
+            local atmPos = nil
+            
+            if atmPart then
+                -- Get the ATM part's position
+                atmPos = atmPart:IsA("Model") and atmPart:GetPivot().Position or atmPart.Position
+                StatusLabel:Set(string.format("Status: ATM %d - Found ATM part! Teleporting inside...", i))
+            else
+                -- Fallback to CriminalATM model position if ATM part not found
+                atmPos = criminalATM:IsA("Model") and criminalATM:GetPivot().Position or criminalATM.Position
+                StatusLabel:Set(string.format("Status: ATM %d - ATM part not found, using model position...", i))
+            end
+            
+            -- FIRST TELEPORT - Teleport directly INSIDE the ATM part
+            StatusLabel:Set(string.format("Status: ATM %d - Teleporting inside (1/2)...", i))
+            properTeleport(atmPos)
+            task.wait(0.15) -- Wait to stabilize position
+            
+            -- SECOND TELEPORT - Teleport again to ensure we stay inside
+            StatusLabel:Set(string.format("Status: ATM %d - Teleporting inside (2/2)...", i))
+            properTeleport(atmPos)
+            task.wait(0.15) -- Wait to stabilize position
+            
+            -- NOW FREEZE character at this position
+            StatusLabel:Set(string.format("Status: ATM %d - Freezing character...", i))
+            freezeCharacter(true)
+            
+            task.wait(0.1) -- Wait for freeze to take effect
+            
+            -- NOW CHANGE THE PROXIMITY PROMPT DURATION BASED ON GAMEPASS (ONCE PER ATM)
+            if prompt then
+                if hasCriminalPass then
+                    prompt.HoldDuration = 1
+                    print(string.format("ATM %d: Set HoldDuration to 1s (Criminal Pass)", i))
+                else
+                    prompt.HoldDuration = 2.6
+                    print(string.format("ATM %d: Set HoldDuration to 2.6s (No Pass)", i))
+                end
+            end
+            
+            -- Get hold duration
+            local holdDuration = prompt.HoldDuration or 2.6
+            
+            -- Hold the prompt using VirtualInputManager (WHILE FROZEN)
+            StatusLabel:Set(string.format("Status: ATM %d - Holding prompt for %.1fs...", i, holdDuration))
+            
+            local VIM = game:GetService("VirtualInputManager")
+            
+            -- Press and hold E key
+            VIM:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+            
+            -- Hold for the full duration without any interruption
+            task.wait(holdDuration + 0.5) -- Buffer time
+            
+            -- Release E key
+            VIM:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+            
+            -- ProximityPrompt complete! NOW unfreeze
+            StatusLabel:Set(string.format("Status: ATM %d - Prompt complete! Unfreezing...", i))
+            completelyUnfreezeCharacter()
+            
+            atmProcessed = atmProcessed + 1
+            
+            -- Disable float before teleporting to safe spot
+            disableFloat()
+            
+            -- Wait 1 second before teleporting to safe zone
+            task.wait(0.1)
+            
+            -- Check if still enabled before teleporting to safe spot
+            if not autoATMEnabled then
+                StatusLabel:Set("Status: Auto-ATM stopped by user")
+                break
+            end
+            
+            StatusLabel:Set(string.format("Status: ATM %d - Complete! Teleporting to safe spot...", i))
+            
+            -- Teleport to safe spot and wait 3 seconds
+            properTeleport(safeTeleportSpot)
+            
+            -- Check again after teleport
+            if not autoATMEnabled then
+                StatusLabel:Set("Status: Auto-ATM stopped by user")
+                break
+            end
+            
+            task.wait(3)
+            
+            -- Add extra wait before next ATM to prevent death
+            StatusLabel:Set(string.format("Status: ATM %d - Waiting before next ATM...", i))
+            task.wait(0) -- Extra 2 seconds delay
+        end
+        
+        if not autoATMEnabled then
+            break
+        end
+    end
+    
+    -- After going through all ATMs, restart immediately without going to safe spot
+    if autoATMEnabled then
+        StatusLabel:Set("Status: All ATMs complete! Restarting immediately...")
+        -- No teleport to safe spot, no wait time - just restart
+    end
+    
+    end -- End of while loop
+    
+    disableFloat()
+    disableAutoUnequip()
+    stopCameraDown() -- Stop camera down when ATM stops
+    stopNoclipLoop() -- Stop noclip loop when ATM stops
+    completelyUnfreezeCharacter()
+    StatusLabel:Set("Status: Auto-ATM Stopped")
+    isRunning = false
+end
+
+-- Toggle
+local AutoATMToggle = MainTab:CreateToggle({
+   Name = "Auto-ATM",
+   CurrentValue = false,
+   Flag = "AutoATMToggle",
+   Callback = function(Value)
+       local previousValue = autoATMEnabled
+       autoATMEnabled = Value
+       
+       if Value then
+           StatusLabel:Set("Status: Auto-ATM Enabled with Auto Sell every 10 minutes!")
+           task.spawn(runAutoATM)
+       else
+           -- Only teleport if it was previously enabled (user manually turned it off)
+           if previousValue then
+               StatusLabel:Set("Status: Auto-ATM Disabled - Stopping and teleporting...")
+               disableFloat()
+               disableAutoUnequip()
+               stopCameraDown() -- Stop camera when toggle is disabled
+               stopNoclipLoop() -- Stop noclip loop when toggle is disabled
+               completelyUnfreezeCharacter()
+               
+               -- Teleport to Outlaw's Base when turning off
+               task.wait(0.2) -- Small delay to ensure everything stops
+               properTeleport(Vector3.new(-2541,15,4032))
+               StatusLabel:Set("Status: Auto-ATM Stopped - Teleported to Outlaw's Base")
+           else
+               StatusLabel:Set("Status: Auto-ATM Stopped")
+               disableFloat()
+               disableAutoUnequip()
+               stopCameraDown()
+               stopNoclipLoop()
+               completelyUnfreezeCharacter()
+           end
+       end
+   end,
+})
+
+-- Manual Sell Button (from your original script)
+local SellButton = MainTab:CreateButton({
+   Name = "Manual Sell [35.000+]",
+   Callback = function()
+       StatusLabel:Set("Status: Manual sell - Teleporting to sell location...")
+       
+       -- Unfreeze character before teleporting
+       completelyUnfreezeCharacter()
+       
+       -- Teleport to sell location
+       properTeleport(sellLocation)
+       StatusLabel:Set("Status: Teleported to sell location!")
+   end,
+})
+
+Rayfield:LoadConfiguration()
+
+-- ==================== AUTO-ARREST TAB ====================
+local ArrestTab = Window:CreateTab("Auto-Arrest", 4483362458)
+
+-- Auto-Arrest Variables
+local autoArrestEnabled = false
+local arrestRunning = false
+local currentTarget = nil
+local arrestWaitPositions = {
+    Vector3.new(-1648, 371, 3716),
+    Vector3.new(100, 363, 244),
+    Vector3.new(544, 364, 2667),
+    Vector3.new(-2339, 344, 2615),
+    Vector3.new(-914, 345, 4951)
+} -- Multiple waiting positions to cycle through
+local currentWaitPositionIndex = 1
+
+-- Auto-Arrest Status Labels
+local ArrestStatusLabel = ArrestTab:CreateLabel("Status: Idle")
+local CurrentTargetLabel = ArrestTab:CreateLabel("Current Target: None")
+
+-- Function to get all players with CriminalHighlight
+-- Function to get root part of character
+local function getRoot(char)
+    return char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
+end
+
+-- Function to get all players with CriminalHighlight
+local function getCriminalsWithHighlight()
+    local criminals = {}
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= Players.LocalPlayer and player.Character then
+            local criminalHighlight = player.Character:FindFirstChild("CriminalHighlight")
+            if criminalHighlight then
+                -- Check if criminal is at negative Y coordinate (not fully loaded)
+                local criminalRoot = getRoot(player.Character)
+                if criminalRoot and criminalRoot.CFrame.Position.Y >= 0 then
+                    table.insert(criminals, player)
+                end
+            end
+        end
+    end
+    return criminals
+end
+
+-- Main Auto-Arrest Loop Function
+local function runAutoArrest()
+    print("DEBUG: runAutoArrest called, arrestRunning =", arrestRunning)
+    if arrestRunning then 
+        print("DEBUG: Already running, returning")
+        return 
+    end
+    arrestRunning = true
+    print("DEBUG: Set arrestRunning = true")
+    
+    -- Update character references at start
+    print("DEBUG: Getting character references...")
+    character = player.Character or player.CharacterAdded:Wait()
+    humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+    humanoid = character:WaitForChild("Humanoid")
+    print("DEBUG: Got character references")
+    
+    -- Ensure character is fully unfrozen before starting
+    print("DEBUG: Unfreezing character...")
+    completelyUnfreezeCharacter()
+    task.wait(0.2)
+    print("DEBUG: Character unfrozen")
+    
+    ArrestStatusLabel:Set("Status: Auto-Arrest Active - Starting patrol...")
+    
+    -- Start at first waiting position
+    currentWaitPositionIndex = 1
+    print("DEBUG: Starting main loop, autoArrestEnabled =", autoArrestEnabled)
+    
+    while autoArrestEnabled do
+        print("DEBUG: Loop iteration, position index =", currentWaitPositionIndex)
+        -- Refresh character references each loop iteration
+        character = player.Character
+        if not character then
+            print("DEBUG: No character, waiting...")
+            task.wait(1)
+            continue
+        end
+        
+        humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+        humanoid = character:FindFirstChild("Humanoid")
+        
+        if not humanoidRootPart or not humanoid then
+            print("DEBUG: No humanoidRootPart or humanoid, waiting...")
+            task.wait(1)
+            continue
+        end
+        
+        print("DEBUG: Character valid, proceeding...")
+        -- First, cycle through waiting positions
+        local char = player.Character
+        if char then
+            local myRoot = getRoot(char)
+            if myRoot then
+                -- Get current waiting position
+                local waitPos = arrestWaitPositions[currentWaitPositionIndex]
+                print("DEBUG: Teleporting to position", currentWaitPositionIndex, "at", waitPos)
+                
+                ArrestStatusLabel:Set(string.format("Status: Patrolling - Position %d/%d", currentWaitPositionIndex, #arrestWaitPositions))
+                CurrentTargetLabel:Set("Current Target: None")
+                
+                -- IMPORTANT: Unfreeze BEFORE teleporting
+                print("DEBUG: Unfreezing before teleport...")
+                completelyUnfreezeCharacter()
+                task.wait(0.1)
+                
+                -- Teleport to waiting position
+                print("DEBUG: Executing teleport...")
+                myRoot.CFrame = CFrame.new(waitPos)
+                print("DEBUG: Teleport executed, new position:", myRoot.CFrame.Position)
+                
+                -- Freeze character at waiting position AFTER teleporting
+                task.wait(0.1)
+                print("DEBUG: Freezing character...")
+                freezeCharacter(true)
+                
+                -- Wait 3 seconds at this position while checking for criminals
+                local waitStartTime = tick()
+                local foundCriminal = false
+                
+                while (tick() - waitStartTime) < 3 and autoArrestEnabled do
+                    task.wait(0.3)
+                    
+                    -- Check for criminals
+                    local criminals = getCriminalsWithHighlight()
+                    if #criminals > 0 then
+                        -- Criminal found! Go arrest them
+                        foundCriminal = true
+                        completelyUnfreezeCharacter()
+                        
+                        for _, criminal in pairs(criminals) do
+                            if not autoArrestEnabled then
+                                break
+                            end
+                            
+                            currentTarget = criminal
+                            CurrentTargetLabel:Set("Current Target: " .. criminal.Name)
+                            ArrestStatusLabel:Set("Status: Arresting " .. criminal.Name)
+                            
+                            -- Get character references
+                            char = player.Character
+                            if not char then continue end
+                            
+                            myRoot = getRoot(char)
+                            if not myRoot then continue end
+                            
+                            -- Loop teleport to criminal until CriminalHighlight is gone
+                            repeat
+                                -- Check if criminal still valid
+                                if not criminal or not criminal.Parent or not criminal.Character then
+                                    break
+                                end
+                                
+                                local criminalHighlight = criminal.Character:FindFirstChild("CriminalHighlight")
+                                if not criminalHighlight then
+                                    ArrestStatusLabel:Set("Status: " .. criminal.Name .. " arrested!")
+                                    break
+                                end
+                                
+                                if not autoArrestEnabled then
+                                    break
+                                end
+                                
+                                -- Get criminal's position
+                                local criminalChar = criminal.Character
+                                if criminalChar then
+                                    local criminalRoot = getRoot(criminalChar)
+                                    if criminalRoot then
+                                        -- Check Y coordinate
+                                        if criminalRoot.CFrame.Position.Y < 0 then
+                                            break
+                                        end
+                                        
+                                        -- Teleport 5 studs ABOVE criminal
+                                        local targetPos = criminalRoot.CFrame.Position + Vector3.new(0, 7, 0)
+                                        myRoot.CFrame = CFrame.new(targetPos)
+                                    end
+                                end
+                                
+                                task.wait(0)
+                                
+                            until not autoArrestEnabled
+                        end
+                        
+                        break -- Break out of 3 second wait
+                    end
+                end
+                
+                -- Move to next waiting position
+                if not foundCriminal then
+                    -- Unfreeze before moving to next position
+                    completelyUnfreezeCharacter()
+                    task.wait(0.1)
+                    
+                    currentWaitPositionIndex = currentWaitPositionIndex + 1
+                    if currentWaitPositionIndex > #arrestWaitPositions then
+                        currentWaitPositionIndex = 1
+                    end
+                end
+            end
+        end
+        
+        task.wait(0.1)
+    end
+    
+    -- Unfreeze when stopping
+    completelyUnfreezeCharacter()
+    
+    currentTarget = nil
+    CurrentTargetLabel:Set("Current Target: None")
+    ArrestStatusLabel:Set("Status: Auto-Arrest Stopped")
+    arrestRunning = false
+end
+
+-- Auto-Arrest Toggle
+local AutoArrestToggle = ArrestTab:CreateToggle({
+   Name = "Auto-Arrest",
+   CurrentValue = false,
+   Flag = "AutoArrestToggle",
+   Callback = function(Value)
+       local previousValue = autoArrestEnabled
+       autoArrestEnabled = Value
+       
+       if Value then
+           -- Wait for previous arrest loop to fully stop
+           local waitTime = 0
+           while arrestRunning and waitTime < 50 do
+               task.wait(0.1)
+               waitTime = waitTime + 1
+           end
+           
+           -- Aggressively unfreeze everything before starting
+           completelyUnfreezeCharacter()
+           task.wait(0.3)
+           
+           -- Reset position index when enabling
+           currentWaitPositionIndex = 1
+           ArrestStatusLabel:Set("Status: Auto-Arrest Enabled!")
+           task.spawn(runAutoArrest)
+       else
+           -- Only teleport if it was previously enabled (user manually turned it off)
+           if previousValue then
+               ArrestStatusLabel:Set("Status: Auto-Arrest Disabled - Teleporting to Police Base...")
+               
+               -- Unfreeze character before teleporting
+               completelyUnfreezeCharacter()
+               
+               -- Teleport to Police Base when turning off
+               task.wait(0.2)
+               local char = player.Character
+               if char then
+                   local myRoot = getRoot(char)
+                   if myRoot then
+                       myRoot.CFrame = CFrame.new(Vector3.new(-152, 27, -929))
+                   end
+               end
+               ArrestStatusLabel:Set("Status: Auto-Arrest Stopped - Teleported to Police Base")
+           else
+               ArrestStatusLabel:Set("Status: Auto-Arrest Stopped")
+           end
+       end
+   end,
+})
+
+-- Police Station Teleport Button
+local PoliceStationButton = ArrestTab:CreateButton({
+   Name = "Police Station",
+   Callback = function()
+       ArrestStatusLabel:Set("Status: Teleporting to Police Station...")
+       
+       -- Unfreeze character before teleporting
+       completelyUnfreezeCharacter()
+       
+       -- Teleport to Police Station
+       local char = player.Character
+       if char then
+           local myRoot = getRoot(char)
+           if myRoot then
+               myRoot.CFrame = CFrame.new(Vector3.new(-152, 27, -929))
+           end
+       end
+       ArrestStatusLabel:Set("Status: Teleported to Police Station!")
+   end,
+})
+
+-- Info label under Police Station button
+ArrestTab:CreateLabel("Become Police first")
+
+-- ==================== CHRISTMAS TAB ====================
+local ChristmasTab = Window:CreateTab("Christmas", 4483362458)
+
+-- Auto-Present Variables
+local autoPresentEnabled = false
+local presentRunning = false
+local presentsProcessed = 0
+
+-- Auto-Present Status Labels
+local PresentStatusLabel = ChristmasTab:CreateLabel("Status: Idle")
+local PresentProgressLabel = ChristmasTab:CreateLabel("Progress: 0 Presents processed")
+
+-- Function to get all PresentSpawners
+local function getAllPresentSpawners()
+    local spawners = {}
+    local success, result = pcall(function()
+        local presentHuntFolder = game:GetService("Workspace").Game.LiveOpsPersistent.Christmas2025.Spawners.PresentHunt
+        
+        if presentHuntFolder then
+            for _, spawner in pairs(presentHuntFolder:GetChildren()) do
+                table.insert(spawners, spawner)
+            end
+        end
+    end)
+    
+    if not success then
+        warn("Error getting PresentSpawners:", result)
+    end
+    
+    return spawners
+end
+
+-- Function to get spawner position
+local function getSpawnerPosition(spawner)
+    if spawner:IsA("Model") then
+        return spawner:GetPivot().Position
+    elseif spawner:IsA("BasePart") then
+        return spawner.Position
+    else
+        -- Try to find a primary part or any part
+        local part = spawner:FindFirstChildWhichIsA("BasePart", true)
+        if part then
+            return part.Position
+        end
+    end
+    return nil
+end
+
+-- Main Auto-Present Function
+local function runAutoPresent()
+    if presentRunning then return end
+    presentRunning = true
+    
+    PresentStatusLabel:Set("Status: Auto-Present Started!")
+    
+    -- Infinite loop for continuous farming
+    while autoPresentEnabled do
+        presentsProcessed = 0
+        
+        -- Get all present spawners
+        local spawners = getAllPresentSpawners()
+        local totalSpawners = #spawners
+        
+        if totalSpawners == 0 then
+            PresentStatusLabel:Set("Status: No Present Spawners found! Retrying in 5s...")
+            task.wait(5)
+            continue
+        end
+        
+        PresentStatusLabel:Set(string.format("Status: Found %d Present Spawners - Starting collection...", totalSpawners))
+        
+        -- Visit each spawner once
+        for i, spawner in ipairs(spawners) do
+            if not autoPresentEnabled then
+                PresentStatusLabel:Set("Status: Stopped by user")
+                break
+            end
+            
+            local spawnerPos = getSpawnerPosition(spawner)
+            
+            if spawnerPos then
+                PresentStatusLabel:Set(string.format("Status: Teleporting to Present %d/%d...", i, totalSpawners))
+                PresentProgressLabel:Set(string.format("Progress: %d/%d Presents processed", presentsProcessed, totalSpawners))
+                
+                -- Get fresh character reference
+                local char = player.Character
+                if char then
+                    local root = char:FindFirstChild("HumanoidRootPart")
+                    if root then
+                        -- Teleport to spawner position (slightly above to prevent clipping)
+                        local targetPos = spawnerPos + Vector3.new(0, 3, 0)
+                        root.CFrame = CFrame.new(targetPos)
+                        
+                        -- Reset velocities
+                        for _, part in pairs(char:GetDescendants()) do
+                            if part:IsA("BasePart") then
+                                part.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                                part.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                            end
+                        end
+                    end
+                end
+                
+                presentsProcessed = presentsProcessed + 1
+                
+                -- Wait 0.3 seconds before next teleport
+                task.wait(0.3)
+            else
+                PresentStatusLabel:Set(string.format("Status: Skipping Present %d/%d (no position)...", i, totalSpawners))
+            end
+        end
+        
+        if not autoPresentEnabled then
+            break
+        end
+        
+        -- All presents collected, wait 10 seconds before restarting
+        PresentStatusLabel:Set(string.format("Status: Collected all %d presents! Waiting 10 seconds...", totalSpawners))
+        PresentProgressLabel:Set(string.format("Progress: %d/%d Presents processed - Restarting in 10s", presentsProcessed, totalSpawners))
+        
+        -- Wait 10 seconds with countdown
+        for i = 10, 1, -1 do
+            if not autoPresentEnabled then
+                break
+            end
+            PresentStatusLabel:Set(string.format("Status: Restarting in %d seconds...", i))
+            task.wait(1)
+        end
+    end
+    
+    PresentStatusLabel:Set("Status: Auto-Present Stopped")
+    PresentProgressLabel:Set("Progress: 0 Presents processed")
+    presentRunning = false
+end
+
+-- Auto-Present Toggle
+ChristmasTab:CreateToggle({
+   Name = "Auto-Present",
+   CurrentValue = false,
+   Flag = "AutoPresentToggle",
+   Callback = function(Value)
+       autoPresentEnabled = Value
+       
+       if Value then
+           PresentStatusLabel:Set("Status: Auto-Present Enabled!")
+           task.spawn(runAutoPresent)
+       else
+           PresentStatusLabel:Set("Status: Auto-Present Disabled")
+       end
+   end,
+})
+
+-- Teleport to all 20 Elfs Button
+ChristmasTab:CreateButton({
+   Name = "Teleport to all 20 Elfs",
+   Callback = function()
+       task.spawn(function()
+           local success, result = pcall(function()
+               local elfHuntFolder = game:GetService("Workspace").Game.LiveOpsPersistent.Christmas2025.Spawners.ElfHunt
+               
+               if elfHuntFolder then
+                   local elfSpawners = elfHuntFolder:GetChildren()
+                   
+                   for i, spawner in ipairs(elfSpawners) do
+                       local spawnerPos = nil
+                       
+                       -- Get spawner position
+                       if spawner:IsA("Model") then
+                           spawnerPos = spawner:GetPivot().Position
+                       elseif spawner:IsA("BasePart") then
+                           spawnerPos = spawner.Position
+                       else
+                           local part = spawner:FindFirstChildWhichIsA("BasePart", true)
+                           if part then
+                               spawnerPos = part.Position
+                           end
+                       end
+                       
+                       if spawnerPos then
+                           -- Get character
+                           local char = player.Character
+                           if char then
+                               local root = char:FindFirstChild("HumanoidRootPart")
+                               if root then
+                                   -- Teleport to elf position (30 studs above)
+                                   local elfPos = spawnerPos + Vector3.new(0, 30, 0)
+                                   root.CFrame = CFrame.new(elfPos)
+                                   
+                                   -- Reset velocities
+                                   for _, part in pairs(char:GetDescendants()) do
+                                       if part:IsA("BasePart") then
+                                           part.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                                           part.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                                       end
+                                   end
+                                   
+                                   -- Wait 6 seconds before next elf
+                                   task.wait(6)
+                               end
+                           end
+                       end
+                   end
+               end
+           end)
+           
+           if not success then
+               warn("Error teleporting to elfs:", result)
+           end
+       end)
+   end,
+})
