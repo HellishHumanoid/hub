@@ -385,7 +385,7 @@ local function startAutoRace()
                 if checkpoint and checkpoint:IsA("BasePart") then
                     print("Lap " .. lap .. " - Teleporting to Checkpoint " .. i)
                     teleportVehicleToCheckpoint(checkpoint.Position)
-                    wait(3) -- 4 second delay
+                    wait(3) -- 3 second delay
                 elseif checkpoint and checkpoint:IsA("Model") then
                     -- If checkpoint is a model, use its PrimaryPart or first part
                     local checkpointPart = checkpoint.PrimaryPart or checkpoint:FindFirstChildWhichIsA("BasePart")
@@ -410,7 +410,7 @@ end
 
 -- Create the Auto-Race toggle
 local AutoRaceToggle = MainTab:CreateToggle({
-    Name = "Auto-Race",
+    Name = "Auto-Race [Around The World]",
     CurrentValue = false,
     Flag = "AutoRaceToggle",
     Callback = function(Value)
@@ -426,6 +426,8 @@ local AutoRaceToggle = MainTab:CreateToggle({
         end
     end,
 })
+
+MainTab:CreateLabel("Get in your car first.")
 
 -- Present spawn locations
 local presentLocations = {
@@ -483,85 +485,115 @@ local function freezePlayer(freeze)
     humanoidRootPart.Anchored = freeze
 end
 
--- Auto-Present function
+-- Function to get all current presents
+local function getAllPresents()
+    local presents = {}
+    
+    local pumpkinsFolder = workspace:FindFirstChild("Pumpkins")
+    local goldenPumpkinsFolder = workspace:FindFirstChild("PumpkinsGolden")
+    
+    -- Get all normal pumpkins
+    if pumpkinsFolder then
+        for _, model in pairs(pumpkinsFolder:GetChildren()) do
+            if model:IsA("Model") then
+                table.insert(presents, model)
+            end
+        end
+    end
+    
+    -- Get all golden pumpkins
+    if goldenPumpkinsFolder then
+        for _, model in pairs(goldenPumpkinsFolder:GetChildren()) do
+            if model:IsA("Model") then
+                table.insert(presents, model)
+            end
+        end
+    end
+    
+    return presents
+end
+
+-- FIXED Auto-Present function - UNFREEZES TO COLLECT!
 local function startAutoPresent()
+    local collectedPresents = {} -- Track collected presents to avoid duplicates
+    
     while autoPresentEnabled do
+        print("=== Starting new cycle ===")
+        
+        -- Go through each spawn location
         for i, location in ipairs(presentLocations) do
             if not autoPresentEnabled then 
-                freezePlayer(false) -- Make sure to unfreeze before breaking
+                freezePlayer(false)
+                print("Auto-Present stopped by user")
                 return 
             end
             
-            print("Teleporting to location " .. i .. " of " .. #presentLocations)
+            print("Checking location " .. i .. " of " .. #presentLocations)
             
             -- Teleport to the spawn location
             teleportPlayer(location)
             
             -- Freeze player in the air
             freezePlayer(true)
-            print("Frozen at location, checking for presents...")
             
-            -- Check for presents while frozen
-            local pumpkinsFolder = workspace:FindFirstChild("Pumpkins")
-            local goldenPumpkinsFolder = workspace:FindFirstChild("PumpkinsGolden")
-            
-            local presents = {}
-            
-            -- Get all pumpkins
-            if pumpkinsFolder then
-                for _, model in pairs(pumpkinsFolder:GetChildren()) do
-                    if model:IsA("Model") then
-                        table.insert(presents, model)
-                    end
-                end
-            end
-            
-            -- Get all golden pumpkins
-            if goldenPumpkinsFolder then
-                for _, model in pairs(goldenPumpkinsFolder:GetChildren()) do
-                    if model:IsA("Model") then
-                        table.insert(presents, model)
-                    end
-                end
-            end
-            
-            -- Wait 2 seconds while frozen
+            -- Wait 2 seconds while frozen to allow presents to load
             wait(2)
             
-            -- Unfreeze player
-            freezePlayer(false)
+            -- Get all presents
+            local allPresents = getAllPresents()
             
-            if not autoPresentEnabled then 
-                return 
+            -- Find uncollected presents within 300 studs
+            local nearbyPresents = {}
+            for _, present in pairs(allPresents) do
+                if not collectedPresents[present] then
+                    local presentPart = present.PrimaryPart or present:FindFirstChildWhichIsA("BasePart")
+                    if presentPart then
+                        local distance = (presentPart.Position - location).Magnitude
+                        if distance <= 3000 then
+                            table.insert(nearbyPresents, present)
+                        end
+                    end
+                end
             end
             
-            -- If presents were found, collect them
-            if #presents > 0 then
-                print("Found " .. #presents .. " presents! Collecting...")
+            -- UNFREEZE before collecting!
+            freezePlayer(false)
+            
+            if #nearbyPresents > 0 then
+                print("Found " .. #nearbyPresents .. " presents near location " .. i .. "! Collecting...")
                 
-                for _, present in pairs(presents) do
+                -- Collect each present
+                for _, present in pairs(nearbyPresents) do
                     if not autoPresentEnabled then 
                         return 
                     end
                     
                     local presentPart = present.PrimaryPart or present:FindFirstChildWhichIsA("BasePart")
                     if presentPart then
-                        print("Collecting present: " .. present.Name)
+                        print("Teleporting to collect present: " .. present.Name)
                         teleportPlayer(presentPart.Position)
-                        wait(0.5) -- Brief wait to collect
+                        collectedPresents[present] = true
+                        wait(0.5) -- Wait for collection
                     end
                 end
+                
+                print("Finished collecting presents at location " .. i)
             else
-                print("No presents found at this location")
+                print("No presents near location " .. i)
             end
+            
+            wait(0.2) -- Small delay before next location
         end
         
-        print("Completed all locations! Restarting loop...")
-        wait(0.5) -- Small delay before restarting
+        print("=== Completed all " .. #presentLocations .. " locations! ===")
+        print("Clearing collected presents list and restarting cycle in 1 second...")
+        collectedPresents = {} -- Reset collected list for next cycle
+        wait(1)
     end
     
     -- Make sure player is unfrozen when function ends
     freezePlayer(false)
+    print("Auto-Present fully stopped")
 end
 
 -- Create the Auto-Present toggle
