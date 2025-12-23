@@ -304,6 +304,8 @@ local AutofarmToggle = MainTab:CreateToggle({
     end,
 })
 
+MainTab:CreateLabel("Get in your car first.")
+
 -- Create Button
 local TeleportButton = MainTab:CreateButton({
     Name = "Teleport to all 30 Gifts",
