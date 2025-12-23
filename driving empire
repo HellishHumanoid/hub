@@ -787,7 +787,7 @@ local AutoATMToggle = MainTab:CreateToggle({
 
 -- Faster Auto-ATM Toggle
 local FasterATMToggle = MainTab:CreateToggle({
-   Name = "Faster Auto-ATM",
+   Name = "Faster Auto-ATM [Might Lag]",
    CurrentValue = false,
    Flag = "FasterATMToggle",
    Callback = function(Value)
