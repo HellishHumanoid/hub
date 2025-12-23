@@ -20,10 +20,13 @@ local ESPTab = Window:CreateTab("ESP", 4483362458)
 
 -- Variables
 local autoRaceEnabled = false
+local autoBeamrushEnabled = false
 local autoPresentEnabled = false
 local espEnabled = false
 local player = game.Players.LocalPlayer
 local espObjects = {}
+local tweenSpeed = 100 -- Default tween speed
+local vehicleNoclipEnabled = false
 
 -- ==================== ANTI-AFK SYSTEM ====================
 local antiAFKRunning = false
@@ -36,52 +39,64 @@ local function startAntiAFK()
         local VIM = game:GetService("VirtualInputManager")
         
         while antiAFKRunning do
-            -- Wait 5 minutes (300 seconds)
             task.wait(300)
-            
-            -- Send a mouse click
             VIM:SendMouseButtonEvent(0, 0, 0, true, game, 1)
             task.wait(0.1)
             VIM:SendMouseButtonEvent(0, 0, 0, false, game, 1)
-            
             print("Anti-AFK: Click sent")
         end
     end)
     
-    print("Anti-AFK: Started - Clicking every 5 minutes")
+    print("Anti-AFK: Started")
 end
 
-local function stopAntiAFK()
-    antiAFKRunning = false
-    print("Anti-AFK: Stopped")
-end
-
--- Start Anti-AFK automatically when script loads
 startAntiAFK()
 
--- ==================== ESP CONFIGURATION ====================
+-- ==================== GARAGE CLEANUP ====================
+local function cleanupGarage()
+    local garage = workspace:FindFirstChild("Garage")
+    if garage then
+        local garageModel = garage:FindFirstChild("Garage")
+        if garageModel then
+            print("Cleaning up Garage model...")
+            local count = 0
+            for _, child in pairs(garageModel:GetChildren()) do
+                if child.Name ~= "Area" then
+                    child:Destroy()
+                    count = count + 1
+                end
+            end
+            print("Deleted " .. count .. " objects from Garage (kept Area)")
+        else
+            warn("Garage.Garage not found!")
+        end
+    else
+        warn("workspace.Garage not found!")
+    end
+end
 
--- ESP Configuration
+-- Run garage cleanup when script loads
+cleanupGarage()
+
+-- ==================== ESP CONFIGURATION ====================
 local ESP_CONFIG = {
     Normal = {
-        BoxColor = Color3.fromRGB(255, 0, 0), -- Red
-        TextColor = Color3.fromRGB(255, 100, 100), -- Brighter Red
+        BoxColor = Color3.fromRGB(255, 0, 0),
+        TextColor = Color3.fromRGB(255, 100, 100),
         Name = "Present"
     },
     Golden = {
-        BoxColor = Color3.fromRGB(255, 215, 0), -- Yellow/Gold
-        TextColor = Color3.fromRGB(255, 255, 100), -- Brighter Yellow
+        BoxColor = Color3.fromRGB(255, 215, 0),
+        TextColor = Color3.fromRGB(255, 255, 100),
         Name = "Golden Present"
     }
 }
 
--- Function to create ESP for a single present
 local function createESP(presentModel, isGolden)
     if espObjects[presentModel] then return end
     
     local config = isGolden and ESP_CONFIG.Golden or ESP_CONFIG.Normal
     
-    -- Create a BillboardGui
     local billboardGui = Instance.new("BillboardGui")
     billboardGui.Name = "PresentESP"
     billboardGui.AlwaysOnTop = true
@@ -94,7 +109,6 @@ local function createESP(presentModel, isGolden)
         return
     end
     
-    -- Create text label
     local textLabel = Instance.new("TextLabel")
     textLabel.Size = UDim2.new(1, 0, 1, 0)
     textLabel.BackgroundTransparency = 1
@@ -106,7 +120,6 @@ local function createESP(presentModel, isGolden)
     textLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
     textLabel.Parent = billboardGui
     
-    -- Apply custom font properties (Gotham SemiBold Italic)
     local fontFace = Font.new(
         "rbxasset://fonts/families/GothamSSm.json",
         Enum.FontWeight.SemiBold,
@@ -116,7 +129,6 @@ local function createESP(presentModel, isGolden)
     
     billboardGui.Parent = game.CoreGui
     
-    -- Create highlight
     local highlight = Instance.new("Highlight")
     highlight.Name = "PresentHighlight"
     highlight.FillColor = config.BoxColor
@@ -126,14 +138,12 @@ local function createESP(presentModel, isGolden)
     highlight.Adornee = presentModel
     highlight.Parent = game.CoreGui
     
-    -- Store ESP objects
     espObjects[presentModel] = {
         Billboard = billboardGui,
         Highlight = highlight
     }
 end
 
--- Function to remove ESP from a present
 local function removeESP(presentModel)
     if espObjects[presentModel] then
         if espObjects[presentModel].Billboard then
@@ -146,7 +156,6 @@ local function removeESP(presentModel)
     end
 end
 
--- Function to clear all ESP
 local function clearAllESP()
     for presentModel, espData in pairs(espObjects) do
         if espData.Billboard then
@@ -159,21 +168,16 @@ local function clearAllESP()
     espObjects = {}
 end
 
--- Function to update ESP for all presents
 local function updateESP()
     if not espEnabled then
         clearAllESP()
         return
     end
     
-    -- Get folders
     local pumpkinsFolder = workspace:FindFirstChild("Pumpkins")
     local goldenPumpkinsFolder = workspace:FindFirstChild("PumpkinsGolden")
-    
-    -- Track which presents still exist
     local existingPresents = {}
     
-    -- Process normal pumpkins
     if pumpkinsFolder then
         for _, model in pairs(pumpkinsFolder:GetChildren()) do
             if model:IsA("Model") then
@@ -185,7 +189,6 @@ local function updateESP()
         end
     end
     
-    -- Process golden pumpkins
     if goldenPumpkinsFolder then
         for _, model in pairs(goldenPumpkinsFolder:GetChildren()) do
             if model:IsA("Model") then
@@ -197,7 +200,6 @@ local function updateESP()
         end
     end
     
-    -- Remove ESP for presents that no longer exist
     for presentModel, _ in pairs(espObjects) do
         if not existingPresents[presentModel] then
             removeESP(presentModel)
@@ -205,23 +207,21 @@ local function updateESP()
     end
 end
 
--- ESP Update Loop
 spawn(function()
     while true do
         if espEnabled then
             updateESP()
         end
-        wait(0.5) -- Update every 0.5 seconds
+        wait(0.5)
     end
 end)
 
--- Listen for new presents being added
 local function setupFolderListener(folder, isGolden)
     if not folder then return end
     
     folder.ChildAdded:Connect(function(child)
         if espEnabled and child:IsA("Model") then
-            wait(0.1) -- Small delay to ensure model is fully loaded
+            wait(0.1)
             createESP(child, isGolden)
         end
     end)
@@ -233,7 +233,6 @@ local function setupFolderListener(folder, isGolden)
     end)
 end
 
--- Setup listeners
 local pumpkinsFolder = workspace:FindFirstChild("Pumpkins")
 local goldenPumpkinsFolder = workspace:FindFirstChild("PumpkinsGolden")
 
@@ -245,7 +244,6 @@ if goldenPumpkinsFolder then
     setupFolderListener(goldenPumpkinsFolder, true)
 end
 
--- Watch for folders being added if they don't exist yet
 workspace.ChildAdded:Connect(function(child)
     if child.Name == "Pumpkins" then
         setupFolderListener(child, false)
@@ -254,14 +252,12 @@ workspace.ChildAdded:Connect(function(child)
     end
 end)
 
--- Create ESP Toggle
 local ESPToggle = ESPTab:CreateToggle({
     Name = "Present ESP",
     CurrentValue = false,
     Flag = "PresentESPToggle",
     Callback = function(Value)
         espEnabled = Value
-        
         if Value then
             print("Present ESP enabled!")
             updateESP()
@@ -272,18 +268,16 @@ local ESPToggle = ESPTab:CreateToggle({
     end,
 })
 
--- Function to get the vehicle the player is sitting in
+-- ==================== VEHICLE FUNCTIONS ====================
 local function getVehicle()
     local character = player.Character or player.CharacterAdded:Wait()
     local humanoid = character:FindFirstChildOfClass("Humanoid")
     if humanoid and humanoid.SeatPart then
-        local seat = humanoid.SeatPart
-        return seat.Parent
+        return humanoid.SeatPart.Parent
     end
     return nil
 end
 
--- Function to teleport vehicle to a position
 local function teleportVehicleToCheckpoint(checkpointPosition)
     local vehicle = getVehicle()
     
@@ -299,24 +293,20 @@ local function teleportVehicleToCheckpoint(checkpointPosition)
         return false
     end
     
-    -- Anchor all parts
     local partsToUnanchor = {}
     for _, part in pairs(vehicle:GetDescendants()) do
         if part:IsA("BasePart") and not part.Anchored then
             part.Anchored = true
             table.insert(partsToUnanchor, part)
-            -- Reset velocity
             part.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
             part.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
         end
     end
     
-    -- Teleport
     local currentCFrame = vehicleRoot.CFrame
     local offset = currentCFrame - currentCFrame.Position
     vehicle:SetPrimaryPartCFrame(CFrame.new(checkpointPosition) * offset)
     
-    -- Wait a moment then unanchor
     wait(0.05)
     for _, part in pairs(partsToUnanchor) do
         part.Anchored = false
@@ -325,7 +315,98 @@ local function teleportVehicleToCheckpoint(checkpointPosition)
     return true
 end
 
--- Auto-Race function
+-- Simple stable vehicle movement with noclip
+local function moveVehicleToPosition(targetPosition, speed)
+    local vehicle = getVehicle()
+    if not vehicle then
+        warn("Not in vehicle!")
+        return false
+    end
+    
+    if not vehicle.PrimaryPart then
+        local seat = vehicle:FindFirstChild("VehicleSeat") or vehicle:FindFirstChildWhichIsA("VehicleSeat")
+        if seat then
+            vehicle.PrimaryPart = seat
+        end
+    end
+    
+    local root = vehicle.PrimaryPart
+    if not root then
+        warn("No primary part!")
+        return false
+    end
+    
+    -- Store offsets and identify wheels
+    local offsets = {}
+    local wheels = {}
+    for _, part in pairs(vehicle:GetDescendants()) do
+        if part:IsA("BasePart") then
+            offsets[part] = root.CFrame:ToObjectSpace(part.CFrame)
+            -- Identify wheels more comprehensively
+            if part.Name:lower():match("wheel") or 
+               part.Name:lower():match("tire") or 
+               part.Shape == Enum.PartType.Cylinder or
+               part.Shape == Enum.PartType.Ball then
+                wheels[part] = true
+            end
+        end
+    end
+    
+    local start = root.Position
+    local distance = (targetPosition - start).Magnitude
+    local duration = distance / speed
+    local startTime = tick()
+    
+    -- Movement loop
+    while true do
+        if not autoBeamrushEnabled then break end
+        
+        local elapsed = tick() - startTime
+        local alpha = math.min(elapsed / duration, 1)
+        
+        -- Interpolate
+        local currentPos = start:Lerp(targetPosition, alpha)
+        local dir = (targetPosition - start).Unit
+        
+        -- Set position with velocity
+        root.CFrame = CFrame.new(currentPos, currentPos + dir)
+        root.AssemblyLinearVelocity = dir * speed
+        
+        -- Update all parts
+        for part, offset in pairs(offsets) do
+            if part ~= root and part.Parent then
+                -- Force exact CFrame position to prevent drift
+                part.CFrame = root.CFrame:ToWorldSpace(offset)
+                
+                if wheels[part] then
+                    -- Completely lock wheels - no velocity, no rotation
+                    part.AssemblyLinearVelocity = Vector3.zero
+                    part.AssemblyAngularVelocity = Vector3.zero
+                    part.RotVelocity = Vector3.zero
+                else
+                    -- Non-wheels get normal velocity
+                    part.AssemblyLinearVelocity = dir * speed
+                end
+            end
+        end
+        
+        if alpha >= 1 then break end
+        task.wait()
+    end
+    
+    -- Stop all movement
+    for part in pairs(offsets) do
+        if part.Parent then
+            part.AssemblyLinearVelocity = Vector3.zero
+            part.AssemblyAngularVelocity = Vector3.zero
+            part.RotVelocity = Vector3.zero
+        end
+    end
+    
+    return true
+end
+
+-- ==================== AUTO-RACE ====================
 local function startAutoRace()
     local checkpointsFolder = workspace:FindFirstChild("Around The World")
     if not checkpointsFolder then
@@ -339,7 +420,6 @@ local function startAutoRace()
         return
     end
     
-    -- Get all checkpoints and sort them
     local checkpoints = {}
     for _, checkpoint in pairs(checkpointsFolder:GetChildren()) do
         if checkpoint.Name:match("Checkpoint%d+") then
@@ -350,27 +430,22 @@ local function startAutoRace()
         end
     end
     
-    -- Start the auto-race loop
     while autoRaceEnabled do
-        -- Step 4: Teleport to starting position
         print("Teleporting to starting position...")
         teleportVehicleToCheckpoint(Vector3.new(-1131, 2, -4203))
         
         if not autoRaceEnabled then break end
         
-        -- Step 5: Wait 10 seconds
         print("Waiting 10 seconds...")
         wait(10)
         
         if not autoRaceEnabled then break end
         
-        -- Step 6: Wait 15 seconds
-        print("Waiting 15 seconds...")
-        wait(15)
+        print("Waiting 16.5 seconds...")
+        wait(16.5)
         
         if not autoRaceEnabled then break end
         
-        -- Steps 1 & 2: Go through checkpoints twice
         for lap = 1, 2 do
             if not autoRaceEnabled then break end
             
@@ -385,9 +460,8 @@ local function startAutoRace()
                 if checkpoint and checkpoint:IsA("BasePart") then
                     print("Lap " .. lap .. " - Teleporting to Checkpoint " .. i)
                     teleportVehicleToCheckpoint(checkpoint.Position)
-                    wait(3) -- 3 second delay
+                    wait(3)
                 elseif checkpoint and checkpoint:IsA("Model") then
-                    -- If checkpoint is a model, use its PrimaryPart or first part
                     local checkpointPart = checkpoint.PrimaryPart or checkpoint:FindFirstChildWhichIsA("BasePart")
                     if checkpointPart then
                         print("Lap " .. lap .. " - Teleporting to Checkpoint " .. i)
@@ -399,16 +473,13 @@ local function startAutoRace()
         end
         
         if autoRaceEnabled then
-            -- Step 3: Wait 3 seconds after completing both laps
             print("Both laps complete! Waiting 3 seconds...")
             wait(3)
-            
             print("Restarting cycle...")
         end
     end
 end
 
--- Create the Auto-Race toggle
 local AutoRaceToggle = MainTab:CreateToggle({
     Name = "Auto-Race [Around The World]",
     CurrentValue = false,
@@ -427,9 +498,450 @@ local AutoRaceToggle = MainTab:CreateToggle({
     end,
 })
 
+-- ==================== AUTO-BEAMRUSH ====================
+local noclipConnection
+
+local function enableNoclip()
+    if noclipConnection then return end
+    vehicleNoclipEnabled = true
+    
+    noclipConnection = game:GetService("RunService").Stepped:Connect(function()
+        local vehicle = getVehicle()
+        if vehicle then
+            for _, part in pairs(vehicle:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = false
+                end
+            end
+        end
+    end)
+end
+
+local function disableNoclip()
+    vehicleNoclipEnabled = false
+    if noclipConnection then
+        noclipConnection:Disconnect()
+        noclipConnection = nil
+    end
+end
+
+local function startAutoBeamrush()
+    print("Auto-Beamrush starting...")
+    
+    -- Initial teleport
+    print("Teleporting to starting position...")
+    teleportVehicleToCheckpoint(Vector3.new(-1744, 1, -3739))
+    
+    if not autoBeamrushEnabled then 
+        disableNoclip()
+        return 
+    end
+    
+    -- Anchor vehicle during wait
+    local vehicle = getVehicle()
+    if vehicle then
+        for _, part in pairs(vehicle:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.Anchored = true
+            end
+        end
+    end
+    
+    print("Waiting 10 seconds...")
+    wait(10)
+    
+    if not autoBeamrushEnabled then 
+        disableNoclip()
+        -- Unanchor before stopping
+        if vehicle then
+            for _, part in pairs(vehicle:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.Anchored = false
+                end
+            end
+        end
+        return 
+    end
+    
+    -- Enable noclip (KEEP CAR ANCHORED)
+    enableNoclip()
+    
+    while autoBeamrushEnabled do
+        local beamsFolder = workspace:FindFirstChild("Beams")
+        
+        if not beamsFolder then
+            warn("Beams folder not found!")
+            -- Car stays anchored
+            wait(2)
+        else
+            local beams = {}
+            for _, beam in pairs(beamsFolder:GetChildren()) do
+                if beam:IsA("BasePart") then
+                    table.insert(beams, beam)
+                end
+            end
+            
+            if #beams > 0 then
+                print("Found " .. #beams .. " beams! Moving at speed " .. tweenSpeed)
+                
+                for i, beam in ipairs(beams) do
+                    if not autoBeamrushEnabled then
+                        print("Auto-Beamrush stopped by user")
+                        vehicle = getVehicle()
+                        if vehicle then
+                            for _, part in pairs(vehicle:GetDescendants()) do
+                                if part:IsA("BasePart") then
+                                    part.Anchored = false
+                                end
+                            end
+                        end
+                        disableNoclip()
+                        return
+                    end
+                    
+                    -- Unanchor ONLY RIGHT BEFORE MOVING
+                    vehicle = getVehicle()
+                    if vehicle then
+                        for _, part in pairs(vehicle:GetDescendants()) do
+                            if part:IsA("BasePart") then
+                                part.Anchored = false
+                            end
+                        end
+                    end
+                    
+                    print("Moving to beam " .. i .. "/" .. #beams .. " (" .. beam.Name .. ")")
+                    moveVehicleToPosition(beam.Position, tweenSpeed)
+                    
+                    -- IMMEDIATELY ANCHOR after reaching beam
+                    vehicle = getVehicle()
+                    if vehicle then
+                        for _, part in pairs(vehicle:GetDescendants()) do
+                            if part:IsA("BasePart") then
+                                part.Anchored = true
+                                part.AssemblyLinearVelocity = Vector3.zero
+                                part.AssemblyAngularVelocity = Vector3.zero
+                            end
+                        end
+                    end
+                    
+                    print("Waiting 3 seconds at beam...")
+                    wait(3)
+                    
+                    -- Car stays anchored for next loop iteration
+                end
+                
+                print("Finished all beams! Checking again in 2 seconds...")
+                -- Car stays anchored
+                wait(2)
+            else
+                print("No beams found, waiting...")
+                -- Car stays anchored
+                wait(2)
+            end
+        end
+    end
+    
+    -- Unanchor when fully stopped
+    vehicle = getVehicle()
+    if vehicle then
+        for _, part in pairs(vehicle:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.Anchored = false
+            end
+        end
+    end
+    
+    disableNoclip()
+    print("Auto-Beamrush stopped")
+end
+
+local AutoBeamrushToggle = MainTab:CreateToggle({
+    Name = "Auto-Beamrush",
+    CurrentValue = false,
+    Flag = "AutoBeamrushToggle",
+    Callback = function(Value)
+        autoBeamrushEnabled = Value
+        
+        if Value then
+            print("Auto-Beamrush enabled!")
+            spawn(function()
+                startAutoBeamrush()
+            end)
+        else
+            print("Auto-Beamrush disabled!")
+            disableNoclip()
+        end
+    end,
+})
+
+local TweenSpeedSlider = MainTab:CreateSlider({
+    Name = "Beamrush Speed",
+    Range = {10, 500},
+    Increment = 10,
+    CurrentValue = 100,
+    Flag = "TweenSpeedSlider",
+    Callback = function(Value)
+        tweenSpeed = Value
+        print("Speed set to: " .. Value)
+    end,
+})
+
 MainTab:CreateLabel("Get in your car first.")
 
--- Present spawn locations
+-- ==================== AUTO-DELIVERY ====================
+local autoDeliveryEnabled = false
+
+local function startAutoDelivery()
+    print("Auto-Delivery starting...")
+    
+    while autoDeliveryEnabled do
+        -- Step 1: Teleport to NPC location
+        print("Teleporting to NPC location...")
+        local character = player.Character or player.CharacterAdded:Wait()
+        local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+        humanoidRootPart.CFrame = CFrame.new(-1750, 3, -4625)
+        
+        wait(1)
+        
+        -- Step 2: Lock camera to NPC
+        print("Locking camera to NPC...")
+        local camera = workspace.CurrentCamera
+        local npc = workspace:WaitForChild("CarQuestFolder"):WaitForChild("NPC")
+        camera.CameraSubject = npc
+        camera.CameraType = Enum.CameraType.Watch
+        
+        wait(0.5)
+        
+        -- Step 3: Press E
+        print("Pressing E...")
+        local VIM = game:GetService("VirtualInputManager")
+        VIM:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+        wait(0.1)
+        VIM:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+        
+        wait(2)
+        
+        -- Step 4: Find and select a car that starts with "20"
+        print("Looking for car starting with '20'...")
+        local playerGui = game:GetService("Players").LocalPlayer.PlayerGui
+        local deliveryGui = playerGui:WaitForChild("MiniGames"):WaitForChild("Delivery")
+        local scrollingFrame = deliveryGui:WaitForChild("Frames"):WaitForChild("Orders"):WaitForChild("Orders"):WaitForChild("ScrollingFrame")
+        
+        local carFound = false
+        for _, frame in pairs(scrollingFrame:GetChildren()) do
+            if frame:IsA("Frame") and frame.Name:match("^20") then
+                local textButton = frame:FindFirstChild("TextButton")
+                if textButton then
+                    print("Found car: " .. frame.Name)
+                    
+                    -- Navigate to the button using GuiService
+                    local GuiService = game:GetService("GuiService")
+                    GuiService.SelectedObject = textButton
+                    
+                    wait(0.5)
+                    
+                    -- Press Enter to select
+                    print("Pressing Enter to select car...")
+                    VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+                    wait(0.1)
+                    VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+                    
+                    carFound = true
+                    break
+                end
+            end
+        end
+        
+        if not carFound then
+            warn("No car starting with '20' found!")
+            -- Reset camera
+            camera.CameraSubject = character:FindFirstChildOfClass("Humanoid")
+            camera.CameraType = Enum.CameraType.Custom
+            wait(2)
+        else
+            -- Step 5: Wait 15 seconds
+            print("Waiting 15 seconds...")
+            wait(15)
+            
+            -- Reset camera
+            camera.CameraSubject = character:FindFirstChildOfClass("Humanoid")
+            camera.CameraType = Enum.CameraType.Custom
+            
+            if not autoDeliveryEnabled then
+                print("Auto-Delivery stopped by user")
+                return
+            end
+            
+            -- Continue with the rest of Auto-Delivery
+            local carQuestFolder = workspace:FindFirstChild("CarQuestFolder")
+            
+            if not carQuestFolder then
+                warn("CarQuestFolder not found!")
+                wait(2)
+            else
+                -- Find the car model (ignore NPC and SkyBeam)
+                local carModel = nil
+                for _, child in pairs(carQuestFolder:GetChildren()) do
+                    if child:IsA("Model") and child.Name ~= "NPC" and child.Name ~= "SkyBeam" and child.Name ~= "Areas" then
+                        carModel = child
+                        break
+                    end
+                end
+                
+                if not carModel then
+                    warn("No car model found in CarQuestFolder!")
+                    wait(2)
+                else
+                    -- Find the DriverSeat
+                    local driverSeat = carModel:FindFirstChild("DriveSeat")
+                    
+                    if not driverSeat then
+                        warn("DriveSeat not found in car model!")
+                        wait(2)
+                    else
+                        print("Found car: " .. carModel.Name)
+                        print("Teleporting to DriverSeat...")
+                        
+                        -- Teleport player to DriverSeat
+                        humanoidRootPart.CFrame = driverSeat.CFrame
+                        
+                        wait(1)
+                        
+                        -- Press F
+                        print("Pressing F to enter car...")
+                        VIM:SendKeyEvent(true, Enum.KeyCode.F, false, game)
+                        wait(0.1)
+                        VIM:SendKeyEvent(false, Enum.KeyCode.F, false, game)
+                        
+                        wait(1)
+                        
+                        -- Now find delivery areas
+                        local areasFolder = carQuestFolder:FindFirstChild("Areas")
+                        
+                        if not areasFolder then
+                            warn("Areas folder not found!")
+                            wait(2)
+                        else
+                            -- Get all DeliveryArea models
+                            local allDeliveryAreas = {}
+                            for _, area in pairs(areasFolder:GetChildren()) do
+                                if area.Name:match("DeliveryArea") and area:IsA("Model") then
+                                    table.insert(allDeliveryAreas, area)
+                                end
+                            end
+                            
+                            if #allDeliveryAreas == 0 then
+                                warn("No delivery areas found!")
+                                wait(2)
+                            else
+                                -- Filter to only areas with transparency 0
+                                local activeDeliveryAreas = {}
+                                for _, area in pairs(allDeliveryAreas) do
+                                    local neonFolder = area:FindFirstChild("Neon")
+                                    if neonFolder then
+                                        local neonParts = neonFolder:GetChildren()
+                                        if neonParts[3] and neonParts[3]:IsA("BasePart") then
+                                            if neonParts[3].Transparency == 0 then
+                                                table.insert(activeDeliveryAreas, area)
+                                            end
+                                        end
+                                    end
+                                end
+                                
+                                if #activeDeliveryAreas == 0 then
+                                    warn("No active delivery areas (transparency 0) found!")
+                                    wait(2)
+                                else
+                                    print("Found " .. #activeDeliveryAreas .. " active delivery areas!")
+                                    
+                                    -- Go to the FIRST active delivery area only
+                                    local area = activeDeliveryAreas[1]
+                                    
+                                    if not autoDeliveryEnabled then
+                                        print("Auto-Delivery stopped by user")
+                                        return
+                                    end
+                                    
+                                    -- Find a part in the model to teleport to
+                                    local areaPart = area.PrimaryPart or area:FindFirstChildWhichIsA("BasePart")
+                                    
+                                    if not areaPart then
+                                        warn("No part found in delivery area " .. area.Name)
+                                        wait(2)
+                                    else
+                                        print("Teleporting to delivery area: " .. area.Name)
+                                        
+                                        -- Teleport (teleportVehicleToCheckpoint already freezes and unfreezes)
+                                        teleportVehicleToCheckpoint(areaPart.Position)
+                                        
+                                        -- Freeze the car for 3 seconds
+                                        local vehicle = getVehicle()
+                                        if vehicle then
+                                            for _, part in pairs(vehicle:GetDescendants()) do
+                                                if part:IsA("BasePart") then
+                                                    part.Anchored = true
+                                                end
+                                            end
+                                        end
+                                        
+                                        print("Car frozen for 1.5 seconds...")
+                                        wait(1.5)
+                                        
+                                        -- Unfreeze the car
+                                        if vehicle then
+                                            for _, part in pairs(vehicle:GetDescendants()) do
+                                                if part:IsA("BasePart") then
+                                                    part.Anchored = false
+                                                end
+                                            end
+                                        end
+                                        
+                                        print("Car unfrozen, waiting 5 seconds at delivery area...")
+                                        wait(5)
+                                        
+                                        print("Waiting 1 seconds before going back to NPC...")
+                                        wait(1)
+                                        
+                                        print("Delivery completed! Going back to NPC...")
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        
+        if not autoDeliveryEnabled then
+            break
+        end
+        
+        print("Restarting Auto-Delivery cycle...")
+        wait(2)
+    end
+    
+    print("Auto-Delivery stopped")
+end
+
+local AutoDeliveryToggle = MainTab:CreateToggle({
+    Name = "Auto-Delivery",
+    CurrentValue = false,
+    Flag = "AutoDeliveryToggle",
+    Callback = function(Value)
+        autoDeliveryEnabled = Value
+        
+        if Value then
+            print("Auto-Delivery enabled!")
+            spawn(function()
+                startAutoDelivery()
+            end)
+        else
+            print("Auto-Delivery disabled!")
+        end
+    end,
+})
+
+-- ==================== AUTO-PRESENT ====================
 local presentLocations = {
     Vector3.new(-2078, 150, -4495),
     Vector3.new(-1888, 150, -3480),
@@ -464,35 +976,27 @@ local presentLocations = {
     Vector3.new(-1180, 150, -3275)
 }
 
--- Function to teleport player character
 local function teleportPlayer(position)
     local character = player.Character or player.CharacterAdded:Wait()
     local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
     
-    -- Reset velocity
     humanoidRootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
     humanoidRootPart.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-    
-    -- Teleport
     humanoidRootPart.CFrame = CFrame.new(position)
 end
 
--- Function to freeze player
 local function freezePlayer(freeze)
     local character = player.Character or player.CharacterAdded:Wait()
     local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
-    
     humanoidRootPart.Anchored = freeze
 end
 
--- Function to get all current presents
 local function getAllPresents()
     local presents = {}
     
     local pumpkinsFolder = workspace:FindFirstChild("Pumpkins")
     local goldenPumpkinsFolder = workspace:FindFirstChild("PumpkinsGolden")
     
-    -- Get all normal pumpkins
     if pumpkinsFolder then
         for _, model in pairs(pumpkinsFolder:GetChildren()) do
             if model:IsA("Model") then
@@ -501,7 +1005,6 @@ local function getAllPresents()
         end
     end
     
-    -- Get all golden pumpkins
     if goldenPumpkinsFolder then
         for _, model in pairs(goldenPumpkinsFolder:GetChildren()) do
             if model:IsA("Model") then
@@ -513,14 +1016,12 @@ local function getAllPresents()
     return presents
 end
 
--- FIXED Auto-Present function - UNFREEZES TO COLLECT!
 local function startAutoPresent()
-    local collectedPresents = {} -- Track collected presents to avoid duplicates
+    local collectedPresents = {}
     
     while autoPresentEnabled do
         print("=== Starting new cycle ===")
         
-        -- Go through each spawn location
         for i, location in ipairs(presentLocations) do
             if not autoPresentEnabled then 
                 freezePlayer(false)
@@ -530,20 +1031,13 @@ local function startAutoPresent()
             
             print("Checking location " .. i .. " of " .. #presentLocations)
             
-            -- Teleport to the spawn location
             teleportPlayer(location)
-            
-            -- Freeze player in the air
             freezePlayer(true)
-            
-            -- Wait 2 seconds while frozen to allow presents to load
             wait(2)
             
-            -- Get all presents
             local allPresents = getAllPresents()
-            
-            -- Find uncollected presents within 300 studs
             local nearbyPresents = {}
+            
             for _, present in pairs(allPresents) do
                 if not collectedPresents[present] then
                     local presentPart = present.PrimaryPart or present:FindFirstChildWhichIsA("BasePart")
@@ -556,13 +1050,11 @@ local function startAutoPresent()
                 end
             end
             
-            -- UNFREEZE before collecting!
             freezePlayer(false)
             
             if #nearbyPresents > 0 then
                 print("Found " .. #nearbyPresents .. " presents near location " .. i .. "! Collecting...")
                 
-                -- Collect each present
                 for _, present in pairs(nearbyPresents) do
                     if not autoPresentEnabled then 
                         return 
@@ -573,7 +1065,7 @@ local function startAutoPresent()
                         print("Teleporting to collect present: " .. present.Name)
                         teleportPlayer(presentPart.Position)
                         collectedPresents[present] = true
-                        wait(0.5) -- Wait for collection
+                        wait(0.5)
                     end
                 end
                 
@@ -582,21 +1074,19 @@ local function startAutoPresent()
                 print("No presents near location " .. i)
             end
             
-            wait(0.2) -- Small delay before next location
+            wait(0.2)
         end
         
         print("=== Completed all " .. #presentLocations .. " locations! ===")
         print("Clearing collected presents list and restarting cycle in 1 second...")
-        collectedPresents = {} -- Reset collected list for next cycle
+        collectedPresents = {}
         wait(1)
     end
     
-    -- Make sure player is unfrozen when function ends
     freezePlayer(false)
     print("Auto-Present fully stopped")
 end
 
--- Create the Auto-Present toggle
 local AutoPresentToggle = MainTab:CreateToggle({
     Name = "Auto-Present",
     CurrentValue = false,
