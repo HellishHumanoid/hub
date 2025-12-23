@@ -151,7 +151,7 @@ local function stopCameraDown()
     print("Camera Down: Stopped - Camera control returned to player")
 end
 
--- ==================== REST OF SCRIPT ====================
+-- ==================== AUTO-ATM TAB ====================
 
 local MainTab = Window:CreateTab("Auto-ATM", 4483362458)
 
@@ -166,132 +166,6 @@ local humanoid = character:WaitForChild("Humanoid")
 local lastSellTime = tick()
 local sellInterval = 600 -- 10 minutes in seconds
 local sellLocation = Vector3.new(-2544, 26, 4030) -- Sell location coordinate
-
--- Death detection and restart
-local function setupDeathDetection()
-    humanoid.Died:Connect(function()
-        StatusLabel:Set("Status: Character died! Waiting to respawn...")
-        
-        -- Wait for respawn
-        character = player.Character or player.CharacterAdded:Wait()
-        humanoidRootPart = character:WaitForChild("HumanoidRootPart")
-        humanoid = character:WaitForChild("Humanoid")
-        
-        -- Disable any lingering float
-        disableFloat()
-        
-        -- Wait a moment for character to stabilize
-        task.wait(2)
-        
-        StatusLabel:Set("Status: Respawned! Restarting from ATM 1...")
-        
-        -- Restart the script if still enabled
-        if autoATMEnabled then
-            isRunning = false
-            task.wait(0.5)
-            task.spawn(runAutoATM)
-        end
-    end)
-end
-
--- Function to get all handle tools
-local function GetHandleTools(p)
-    p = p or player
-    local r = {}
-    for _, v in ipairs(p.Character and p.Character:GetChildren() or {}) do
-        if v:IsA("BackpackItem") and v:FindFirstChild("Handle") then
-            r[#r + 1] = v
-        end
-    end
-    for _, v in ipairs(p.Backpack:GetChildren()) do
-        if v:IsA("BackpackItem") and v:FindFirstChild("Handle") then
-            r[#r + 1] = v
-        end
-    end
-    return r
-end
-
--- DEDICATED UNEQUIP LOOP - RUNS CONSTANTLY
-local unequipLoopRunning = false
-local function startUnequipLoop()
-    unequipLoopRunning = true
-    
-    task.spawn(function()
-        while unequipLoopRunning and autoATMEnabled do
-            -- Get current character EVERY LOOP
-            local char = player.Character
-            if char then
-                local hum = char:FindFirstChildOfClass('Humanoid')
-                if hum then
-                    pcall(function()
-                        hum:UnequipTools()
-                    end)
-                end
-                
-                -- Also delete CriminalMoneyBag
-                for _, item in pairs(char:GetChildren()) do
-                    if item.Name == "CriminalMoneyBag" then
-                        pcall(function()
-                            item:Destroy()
-                        end)
-                    end
-                end
-            end
-            
-            task.wait(0.01) -- Loop every 0.01 seconds - SUPER FAST
-        end
-    end)
-end
-
-local function stopUnequipLoop()
-    unequipLoopRunning = false
-end
-
--- Function to setup auto-unequip monitoring
-local autoUnequipHeartbeat = nil
-local function setupAutoUnequip()
-    -- Disconnect old connection if exists
-    if autoUnequipHeartbeat then
-        autoUnequipHeartbeat:Disconnect()
-    end
-    
-    -- Start the dedicated unequip loop
-    startUnequipLoop()
-    
-    -- Check EVERY FRAME and force unequip
-    autoUnequipHeartbeat = game:GetService("RunService").Heartbeat:Connect(function()
-        if autoATMEnabled then
-            -- Get current character
-            local char = player.Character
-            if not char then return end
-            
-            local hum = char:FindFirstChildOfClass('Humanoid')
-            if hum then
-                pcall(function()
-                    hum:UnequipTools()
-                end)
-            end
-            
-            -- DELETE CriminalMoneyBag
-            for _, item in pairs(char:GetChildren()) do
-                if item.Name == "CriminalMoneyBag" then
-                    pcall(function()
-                        item:Destroy()
-                    end)
-                end
-            end
-        end
-    end)
-end
-
--- Function to disable auto-unequip
-local function disableAutoUnequip()
-    stopUnequipLoop()
-    if autoUnequipHeartbeat then
-        autoUnequipHeartbeat:Disconnect()
-        autoUnequipHeartbeat = nil
-    end
-end
 
 -- ATM Coordinates (all 48 locations)
 local atmCoordinates = {
@@ -350,6 +224,8 @@ local autoATMEnabled = false
 local isRunning = false
 local atmProcessed = 0
 local atmSkipped = 0
+local safeTeleportSpot = Vector3.new(-773, 99999, -1283)
+local fasterATMEnabled = false
 
 -- Status Label
 local StatusLabel = MainTab:CreateLabel("Status: Idle")
@@ -359,11 +235,29 @@ local SellTimerLabel = MainTab:CreateLabel("Next Sell: 10:00")
 -- Add gamepass status label
 local GamepassLabel = MainTab:CreateLabel(hasCriminalPass and "Criminal Pass: ✅ Detected (1s)" or "Criminal Pass: ❌ Not Found (2.6s)")
 
--- Reset status to Idle when script loads
-task.spawn(function()
-    task.wait(0.1)
-    StatusLabel:Set("Status: Idle")
-end)
+-- Death detection and restart
+local function setupDeathDetection()
+    humanoid.Died:Connect(function()
+        StatusLabel:Set("Status: Character died! Waiting to respawn...")
+        
+        -- Wait for respawn
+        character = player.Character or player.CharacterAdded:Wait()
+        humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+        humanoid = character:WaitForChild("Humanoid")
+        
+        -- Wait a moment for character to stabilize
+        task.wait(2)
+        
+        StatusLabel:Set("Status: Respawned! Restarting from ATM 1...")
+        
+        -- Restart the script if still enabled
+        if autoATMEnabled then
+            isRunning = false
+            task.wait(0.5)
+            task.spawn(runAutoATM)
+        end
+    end)
+end
 
 -- Function to update sell timer display
 local function updateSellTimer()
@@ -407,9 +301,8 @@ local function freezeCharacter(freeze)
     end
 end
 
--- Function to completely unfreeze character (with physics reset)
+-- Function to completely unfreeze character
 local function completelyUnfreezeCharacter()
-    -- Update character reference
     character = player.Character
     if not character then return end
     
@@ -427,34 +320,29 @@ local function completelyUnfreezeCharacter()
         end
     end
     
-    -- Reset humanoid properties
     humanoid.WalkSpeed = 16
     humanoid.JumpPower = 50
     humanoid.AutoRotate = true
     humanoid.Sit = false
+    humanoid.PlatformStand = false
     
-    -- Make sure HumanoidRootPart is unfrozen
     humanoidRootPart.Anchored = false
     humanoidRootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
     humanoidRootPart.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
     
-    -- Small wait to let physics settle
     task.wait(0.1)
 end
 
 -- Function to teleport properly
 local function properTeleport(targetPos)
-    -- Get fresh character references
     local char = player.Character
     if not char then return end
     
     local root = char:FindFirstChild("HumanoidRootPart")
     if not root then return end
     
-    -- Teleport character
     root.CFrame = CFrame.new(targetPos)
     
-    -- Reset all velocities to prevent physics issues
     for _, part in pairs(char:GetDescendants()) do
         if part:IsA("BasePart") then
             part.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
@@ -462,115 +350,190 @@ local function properTeleport(targetPos)
         end
     end
     
-    -- Small wait to stabilize
     task.wait(0.05)
 end
 
--- Function to enable floating (zero gravity)
-local floatBodyVelocity = nil
-local function enableFloat()
-    -- Get fresh character references
-    local char = player.Character
-    if not char then return end
-    
-    local root = char:FindFirstChild("HumanoidRootPart")
-    local hum = char:FindFirstChild("Humanoid")
-    if not root or not hum then return end
-    
-    -- Remove old float if exists
-    if floatBodyVelocity then
-        floatBodyVelocity:Destroy()
-    end
-    
-    -- Create BodyVelocity for zero gravity floating
-    floatBodyVelocity = Instance.new("BodyVelocity")
-    floatBodyVelocity.MaxForce = Vector3.new(0, math.huge, 0) -- Only affect Y axis
-    floatBodyVelocity.Velocity = Vector3.new(0, 0, 0) -- No movement
-    floatBodyVelocity.Parent = root
-    
-    -- Disable humanoid gravity
-    hum.PlatformStand = true
-end
+-- ==================== CAMERA DOWN SYSTEM ====================
+local cameraDownRunning = false
+local cameraConnection = nil
 
--- Function to disable floating
-local function disableFloat()
-    if floatBodyVelocity then
-        floatBodyVelocity:Destroy()
-        floatBodyVelocity = nil
+local function startCameraDown()
+    if cameraDownRunning then return end
+    cameraDownRunning = true
+    
+    local camera = workspace.CurrentCamera
+    
+    if cameraConnection then
+        cameraConnection:Disconnect()
     end
     
-    -- Re-enable humanoid gravity
-    local char = player.Character
-    if char then
-        local hum = char:FindFirstChild("Humanoid")
-        if hum then
-            hum.PlatformStand = false
-        end
-    end
-end
-
--- Function to enable noclip (disable collision)
-local function enableNoclip()
-    local char = player.Character
-    if not char then return end
-    
-    -- Disable CanCollide on all parts
-    for _, part in pairs(char:GetDescendants()) do
-        if part:IsA("BasePart") then
-            part.CanCollide = false
-        end
-    end
-end
-
--- Function to disable noclip (re-enable collision)
-local function disableNoclip()
-    local char = player.Character
-    if not char then return end
-    
-    -- Re-enable CanCollide on all parts except specific ones
-    for _, part in pairs(char:GetDescendants()) do
-        if part:IsA("BasePart") then
-            -- Don't re-enable collision on accessories
-            if not part.Parent:IsA("Accessory") then
-                part.CanCollide = true
+    cameraConnection = game:GetService("RunService").RenderStepped:Connect(function()
+        if cameraDownRunning and player.Character then
+            local humanoidRootPart = player.Character:FindFirstChild("HumanoidRootPart")
+            if humanoidRootPart and camera.CameraType == Enum.CameraType.Custom then
+                local camPos = humanoidRootPart.Position + Vector3.new(0, 20, 3.5)
+                local lookAtPos = humanoidRootPart.Position + Vector3.new(0, -2, 0)
+                camera.CFrame = CFrame.new(camPos, lookAtPos)
             end
         end
-    end
+    end)
+    
+    print("Camera Down: Started - Camera angled down")
 end
 
--- CONTINUOUS NOCLIP LOOP - Keeps noclip active at all times when Auto-ATM is on
-local noclipLoopRunning = false
-local function startNoclipLoop()
-    noclipLoopRunning = true
+local function stopCameraDown()
+    cameraDownRunning = false
+    
+    if cameraConnection then
+        cameraConnection:Disconnect()
+        cameraConnection = nil
+    end
+    
+    print("Camera Down: Stopped - Camera control returned to player")
+end
+
+-- ==================== SEAT DELETION SYSTEM ====================
+local seatDeletionRunning = false
+
+local function startSeatDeletion()
+    seatDeletionRunning = true
     
     task.spawn(function()
-        while noclipLoopRunning and autoATMEnabled do
-            -- Get current character EVERY LOOP
+        while seatDeletionRunning and autoATMEnabled do
             local char = player.Character
             if char then
-                -- Disable CanCollide on all parts continuously
-                for _, part in pairs(char:GetDescendants()) do
-                    if part:IsA("BasePart") then
-                        part.CanCollide = false
+                -- Only delete seats in character
+                for _, item in pairs(char:GetChildren()) do
+                    if item:IsA("Seat") or item:IsA("VehicleSeat") then
+                        pcall(function()
+                            item:Destroy()
+                        end)
                     end
                 end
             end
             
-            task.wait(0.1) -- Loop every 0.1 seconds to maintain noclip
+            task.wait(0.5) -- Increased wait time to reduce lag
         end
     end)
 end
 
-local function stopNoclipLoop()
-    noclipLoopRunning = false
-    -- Re-enable collision after stopping
-    disableNoclip()
+local function stopSeatDeletion()
+    seatDeletionRunning = false
 end
 
--- Safe spot coordinate
-local safeTeleportSpot = Vector3.new(-773, 99999, -1283)
+-- ==================== PRESENT PAD CLEANUP SYSTEM ====================
+local presentCleanupRunning = false
 
--- Function to find closest ATM spawner to coordinate
+local function startPresentCleanup()
+    presentCleanupRunning = true
+    
+    task.spawn(function()
+        while presentCleanupRunning and autoATMEnabled do
+            pcall(function()
+                local presentHunt = game:GetService("Workspace").Game.LiveOpsPersistent.Christmas2025.Spawners.PresentHunt
+                if presentHunt then
+                    local spawners = presentHunt:GetChildren()
+                    
+                    -- Loop through ALL spawners (all 110+)
+                    for _, spawner in pairs(spawners) do
+                        local presentPad = spawner:FindFirstChild("PresentSpawnerPad")
+                        if presentPad then
+                            local children = presentPad:GetChildren()
+                            -- Only keep 1 child, delete all others
+                            if #children > 1 then
+                                for i = 2, #children do
+                                    children[i]:Destroy()
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+            
+            task.wait(0.1) -- Check every 0.1 seconds for aggressive cleanup
+        end
+    end)
+end
+
+local function stopPresentCleanup()
+    presentCleanupRunning = false
+end
+
+-- ==================== AUTO-UNEQUIP SYSTEM ====================
+local unequipLoopRunning = false
+local autoUnequipHeartbeat = nil
+
+local function startUnequipLoop()
+    unequipLoopRunning = true
+    
+    task.spawn(function()
+        while unequipLoopRunning and autoATMEnabled do
+            local char = player.Character
+            if char then
+                local hum = char:FindFirstChildOfClass('Humanoid')
+                if hum then
+                    pcall(function()
+                        hum:UnequipTools()
+                    end)
+                end
+                
+                for _, item in pairs(char:GetChildren()) do
+                    if item.Name == "CriminalMoneyBag" then
+                        pcall(function()
+                            item:Destroy()
+                        end)
+                    end
+                end
+            end
+            
+            task.wait(0.01)
+        end
+    end)
+end
+
+local function stopUnequipLoop()
+    unequipLoopRunning = false
+end
+
+local function setupAutoUnequip()
+    if autoUnequipHeartbeat then
+        autoUnequipHeartbeat:Disconnect()
+    end
+    
+    startUnequipLoop()
+    
+    autoUnequipHeartbeat = game:GetService("RunService").Heartbeat:Connect(function()
+        if autoATMEnabled then
+            local char = player.Character
+            if not char then return end
+            
+            local hum = char:FindFirstChildOfClass('Humanoid')
+            if hum then
+                pcall(function()
+                    hum:UnequipTools()
+                end)
+            end
+            
+            for _, item in pairs(char:GetChildren()) do
+                if item.Name == "CriminalMoneyBag" then
+                    pcall(function()
+                        item:Destroy()
+                    end)
+                end
+            end
+        end
+    end)
+end
+
+local function disableAutoUnequip()
+    stopUnequipLoop()
+    if autoUnequipHeartbeat then
+        autoUnequipHeartbeat:Disconnect()
+        autoUnequipHeartbeat = nil
+    end
+end
+
+-- Function to find closest ATM spawner
 local function findATMSpawnerAtCoordinate(targetPos)
     local spawners = Workspace.Game.Jobs.CriminalATMSpawners:GetChildren()
     local closestSpawner = nil
@@ -581,7 +544,7 @@ local function findATMSpawnerAtCoordinate(targetPos)
             local spawnerPos = spawner:IsA("Model") and spawner:GetPivot().Position or spawner.Position
             local distance = (spawnerPos - targetPos).Magnitude
             
-            if distance < closestDistance and distance < 50 then -- Within 50 studs
+            if distance < closestDistance and distance < 50 then
                 closestDistance = distance
                 closestSpawner = spawner
             end
@@ -594,14 +557,10 @@ end
 -- Function to check if ATM has enabled ProximityPrompt
 local function checkATMPrompt(spawner)
     local criminalATM = spawner:FindFirstChild("CriminalATM")
-    if not criminalATM then
-        return nil
-    end
+    if not criminalATM then return nil end
     
     local attachment = criminalATM:FindFirstChild("Attachment")
-    if not attachment then
-        return nil
-    end
+    if not attachment then return nil end
     
     local proximityPrompt = attachment:FindFirstChild("ProximityPrompt")
     if proximityPrompt and proximityPrompt.Enabled then
@@ -611,26 +570,21 @@ local function checkATMPrompt(spawner)
     return nil
 end
 
--- SELL FUNCTION - Completely stops ATM farming and sells
+-- SELL FUNCTION
 local function performSell()
     StatusLabel:Set("Status: ⏰ TIME TO SELL! Stopping all ATM farming...")
     
-    -- Completely unfreeze character and disable float
     completelyUnfreezeCharacter()
-    disableFloat()
     
-    -- Teleport to sell location 3 times with 1 second delay
     for i = 1, 3 do
         StatusLabel:Set(string.format("Status: 💰 SELLING - Teleport %d/3 to sell location...", i))
         properTeleport(sellLocation)
-        task.wait(1) -- 1 second delay between each teleport
+        task.wait(1)
     end
     
-    -- After 3 teleports, wait a bit and update status
     StatusLabel:Set("Status: ✅ Sell complete! Resuming ATM farming in 3 seconds...")
     task.wait(3)
     
-    -- Reset the sell timer
     lastSellTime = tick()
     
     StatusLabel:Set("Status: 🔄 Resuming ATM farming...")
@@ -641,71 +595,58 @@ local function runAutoATM()
     if isRunning then return end
     isRunning = true
     
-    -- Reset sell timer on start
     lastSellTime = tick()
-    
-    -- Setup death detection
     setupDeathDetection()
-    
-    -- Setup aggressive auto-unequip monitoring
     setupAutoUnequip()
-    
-    -- Start camera down system
     startCameraDown()
-    
-    -- START CONTINUOUS NOCLIP LOOP - Keeps noclip active at all times
-    startNoclipLoop()
-    
-    -- Start sell timer display
+    startSeatDeletion()
+    startPresentCleanup()
     updateSellTimer()
     
-    -- Loop infinitely for overnight farming
     while autoATMEnabled do
         atmProcessed = 0
         atmSkipped = 0
         
         StatusLabel:Set("Status: Starting Auto-ATM run...")
         
-        -- Loop through all ATMs ONCE before restarting
-        for cycle = 1, 1 do
-            StatusLabel:Set(string.format("Status: Starting ATM run...", cycle))
+        for i, coord in ipairs(atmCoordinates) do
+            if not autoATMEnabled then
+                StatusLabel:Set("Status: Stopped by user")
+                break
+            end
             
-            for i, coord in ipairs(atmCoordinates) do
-                if not autoATMEnabled then
-                    StatusLabel:Set("Status: Stopped by user")
-                    break
-                end
-            
-            -- CHECK IF IT'S TIME TO SELL (every 10 minutes)
+            -- Check if time to sell
             local currentTime = tick()
             if (currentTime - lastSellTime) >= sellInterval then
-                performSell() -- This will COMPLETELY STOP and teleport 3 times to sell
+                performSell()
             end
             
             StatusLabel:Set(string.format("Status: Checking ATM %d/48...", i))
             ProgressLabel:Set(string.format("Progress: %d/48 | Processed: %d | Skipped: %d", i, atmProcessed, atmSkipped))
             
-            -- Teleport to ATM location (15 studs above while searching)
-            StatusLabel:Set(string.format("Status: ATM %d - Teleporting to location...", i))
-            local searchCoord = coord + Vector3.new(0, 15, 0) -- 15 studs above while searching
+            -- Teleport 30 studs above ATM location and freeze
+            local searchCoord = coord + Vector3.new(0, 30, 0)
             properTeleport(searchCoord)
+            freezeCharacter(true)
             
-            task.wait(0.1) -- Wait time to stabilize and prevent death
+            task.wait(0.5)
             
-            -- Quick check: Find the spawner at this location
+            -- Find the spawner
             local spawner = findATMSpawnerAtCoordinate(coord)
             
             if not spawner then
-                StatusLabel:Set(string.format("Status: ATM %d - No spawner, skipping fast...", i))
+                StatusLabel:Set(string.format("Status: ATM %d - No spawner, skipping...", i))
                 atmSkipped = atmSkipped + 1
+                completelyUnfreezeCharacter()
                 continue
             end
             
-            -- Quick check: Does it have CriminalATM model?
+            -- Check if has CriminalATM model
             local criminalATM = spawner:FindFirstChild("CriminalATM")
             if not criminalATM then
-                StatusLabel:Set(string.format("Status: ATM %d - No ATM model, skipping fast...", i))
+                StatusLabel:Set(string.format("Status: ATM %d - No ATM model, skipping...", i))
                 atmSkipped = atmSkipped + 1
+                completelyUnfreezeCharacter()
                 continue
             end
             
@@ -713,125 +654,96 @@ local function runAutoATM()
             local prompt = checkATMPrompt(spawner)
             
             if not prompt then
-                StatusLabel:Set(string.format("Status: ATM %d - No enabled prompt, skipping fast...", i))
+                StatusLabel:Set(string.format("Status: ATM %d - No enabled prompt, skipping...", i))
                 atmSkipped = atmSkipped + 1
+                completelyUnfreezeCharacter()
                 continue
             end
             
-            -- Valid ATM found! Get the ATM part inside the CriminalATM model
-            StatusLabel:Set(string.format("Status: ATM %d - Valid ATM found! Getting ATM part...", i))
+            -- Valid ATM found!
+            StatusLabel:Set(string.format("Status: ATM %d - Valid ATM found!", i))
             
-            -- Find the "ATM" part inside the CriminalATM model
+            -- Find ATM part position
             local atmPart = criminalATM:FindFirstChild("ATM")
             local atmPos = nil
             
             if atmPart then
-                -- Get the ATM part's position
                 atmPos = atmPart:IsA("Model") and atmPart:GetPivot().Position or atmPart.Position
-                StatusLabel:Set(string.format("Status: ATM %d - Found ATM part! Teleporting inside...", i))
             else
-                -- Fallback to CriminalATM model position if ATM part not found
                 atmPos = criminalATM:IsA("Model") and criminalATM:GetPivot().Position or criminalATM.Position
-                StatusLabel:Set(string.format("Status: ATM %d - ATM part not found, using model position...", i))
             end
             
-            -- FIRST TELEPORT - Teleport directly INSIDE the ATM part
-            StatusLabel:Set(string.format("Status: ATM %d - Teleporting inside (1/2)...", i))
-            properTeleport(atmPos)
-            task.wait(0.15) -- Wait to stabilize position
+            -- Freeze for 1 second
+            StatusLabel:Set(string.format("Status: ATM %d - Freezing...", i))
+            freezeCharacter(true)
+            task.wait(1)
             
-            -- SECOND TELEPORT - Teleport again to ensure we stay inside
-            StatusLabel:Set(string.format("Status: ATM %d - Teleporting inside (2/2)...", i))
+            -- Unfreeze and teleport to ATM coordinate
+            completelyUnfreezeCharacter()
+            StatusLabel:Set(string.format("Status: ATM %d - Teleporting to ATM...", i))
             properTeleport(atmPos)
-            task.wait(0.15) -- Wait to stabilize position
+            task.wait(0.15)
             
-            -- NOW FREEZE character at this position
-            StatusLabel:Set(string.format("Status: ATM %d - Freezing character...", i))
+            -- Freeze inside ATM
             freezeCharacter(true)
             
-            task.wait(0.1) -- Wait for freeze to take effect
-            
-            -- NOW CHANGE THE PROXIMITY PROMPT DURATION BASED ON GAMEPASS (ONCE PER ATM)
-            if prompt then
-                if hasCriminalPass then
-                    prompt.HoldDuration = 1
-                    print(string.format("ATM %d: Set HoldDuration to 1s (Criminal Pass)", i))
-                else
-                    prompt.HoldDuration = 2.6
-                    print(string.format("ATM %d: Set HoldDuration to 2.6s (No Pass)", i))
-                end
+            -- Set hold duration based on gamepass AND faster mode
+            local holdDuration
+            if fasterATMEnabled then
+                holdDuration = hasCriminalPass and 1 or 2.6 -- Faster mode: 1s with pass, 2.6s without
+            else
+                holdDuration = hasCriminalPass and 2.5 or 5 -- Normal mode: 2.5s with pass, 5s without
             end
+            prompt.HoldDuration = holdDuration
             
-            -- Get hold duration
-            local holdDuration = prompt.HoldDuration or 2.6
-            
-            -- Hold the prompt using VirtualInputManager (WHILE FROZEN)
             StatusLabel:Set(string.format("Status: ATM %d - Holding prompt for %.1fs...", i, holdDuration))
             
             local VIM = game:GetService("VirtualInputManager")
             
-            -- Press and hold E key
+            -- Hold E key
             VIM:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-            
-            -- Hold for the full duration without any interruption
-            task.wait(holdDuration + 0.5) -- Buffer time
-            
-            -- Release E key
+            task.wait(holdDuration + 0.5)
             VIM:SendKeyEvent(false, Enum.KeyCode.E, false, game)
             
-            -- ProximityPrompt complete! NOW unfreeze
-            StatusLabel:Set(string.format("Status: ATM %d - Prompt complete! Unfreezing...", i))
+            -- Complete! Unfreeze
+            StatusLabel:Set(string.format("Status: ATM %d - Complete! Unfreezing...", i))
             completelyUnfreezeCharacter()
             
             atmProcessed = atmProcessed + 1
             
-            -- Disable float before teleporting to safe spot
-            disableFloat()
+            task.wait(0.5)
             
-            -- Wait 1 second before teleporting to safe zone
-            task.wait(0.1)
-            
-            -- Check if still enabled before teleporting to safe spot
             if not autoATMEnabled then
                 StatusLabel:Set("Status: Auto-ATM stopped by user")
                 break
             end
             
-            StatusLabel:Set(string.format("Status: ATM %d - Complete! Teleporting to safe spot...", i))
-            
-            -- Teleport to safe spot and wait 3 seconds
+            StatusLabel:Set(string.format("Status: ATM %d - Teleporting to safe spot...", i))
             properTeleport(safeTeleportSpot)
+            freezeCharacter(true)
             
-            -- Check again after teleport
             if not autoATMEnabled then
                 StatusLabel:Set("Status: Auto-ATM stopped by user")
                 break
             end
             
             task.wait(3)
-            
-            -- Add extra wait before next ATM to prevent death
-            StatusLabel:Set(string.format("Status: ATM %d - Waiting before next ATM...", i))
-            task.wait(0) -- Extra 2 seconds delay
+            completelyUnfreezeCharacter()
         end
         
         if not autoATMEnabled then
             break
         end
+        
+        if autoATMEnabled then
+            StatusLabel:Set("Status: All ATMs complete! Restarting immediately...")
+        end
     end
     
-    -- After going through all ATMs, restart immediately without going to safe spot
-    if autoATMEnabled then
-        StatusLabel:Set("Status: All ATMs complete! Restarting immediately...")
-        -- No teleport to safe spot, no wait time - just restart
-    end
-    
-    end -- End of while loop
-    
-    disableFloat()
     disableAutoUnequip()
-    stopCameraDown() -- Stop camera down when ATM stops
-    stopNoclipLoop() -- Stop noclip loop when ATM stops
+    stopCameraDown()
+    stopSeatDeletion()
+    stopPresentCleanup()
     completelyUnfreezeCharacter()
     StatusLabel:Set("Status: Auto-ATM Stopped")
     isRunning = false
@@ -850,47 +762,60 @@ local AutoATMToggle = MainTab:CreateToggle({
            StatusLabel:Set("Status: Auto-ATM Enabled with Auto Sell every 10 minutes!")
            task.spawn(runAutoATM)
        else
-           -- Only teleport if it was previously enabled (user manually turned it off)
            if previousValue then
                StatusLabel:Set("Status: Auto-ATM Disabled - Stopping and teleporting...")
-               disableFloat()
                disableAutoUnequip()
-               stopCameraDown() -- Stop camera when toggle is disabled
-               stopNoclipLoop() -- Stop noclip loop when toggle is disabled
+               stopCameraDown()
+               stopSeatDeletion()
+               stopPresentCleanup()
                completelyUnfreezeCharacter()
                
-               -- Teleport to Outlaw's Base when turning off
-               task.wait(0.2) -- Small delay to ensure everything stops
+               task.wait(0.2)
                properTeleport(Vector3.new(-2541,15,4032))
                StatusLabel:Set("Status: Auto-ATM Stopped - Teleported to Outlaw's Base")
            else
                StatusLabel:Set("Status: Auto-ATM Stopped")
-               disableFloat()
                disableAutoUnequip()
                stopCameraDown()
-               stopNoclipLoop()
+               stopSeatDeletion()
+               stopPresentCleanup()
                completelyUnfreezeCharacter()
            end
        end
    end,
 })
 
--- Manual Sell Button (from your original script)
+-- Faster Auto-ATM Toggle
+local FasterATMToggle = MainTab:CreateToggle({
+   Name = "Faster Auto-ATM",
+   CurrentValue = false,
+   Flag = "FasterATMToggle",
+   Callback = function(Value)
+       fasterATMEnabled = Value
+       if Value then
+           if hasCriminalPass then
+               StatusLabel:Set("Status: Faster mode enabled - 1s prompt duration!")
+           else
+               StatusLabel:Set("Status: Faster mode enabled - 2.6s prompt duration!")
+           end
+       else
+           StatusLabel:Set("Status: Normal mode - Using gamepass duration")
+       end
+   end,
+})
+
+-- Manual Sell Button
 local SellButton = MainTab:CreateButton({
    Name = "Manual Sell [35.000+]",
    Callback = function()
        StatusLabel:Set("Status: Manual sell - Teleporting to sell location...")
        
-       -- Unfreeze character before teleporting
        completelyUnfreezeCharacter()
        
-       -- Teleport to sell location
        properTeleport(sellLocation)
        StatusLabel:Set("Status: Teleported to sell location!")
    end,
 })
-
-Rayfield:LoadConfiguration()
 
 -- ==================== AUTO-ARREST TAB ====================
 local ArrestTab = Window:CreateTab("Auto-Arrest", 4483362458)
@@ -1110,6 +1035,8 @@ local function runAutoArrest()
     arrestRunning = false
 end
 
+ArrestTab:CreateLabel("Become Police first")
+
 -- Auto-Arrest Toggle
 local AutoArrestToggle = ArrestTab:CreateToggle({
    Name = "Auto-Arrest",
@@ -1180,9 +1107,6 @@ local PoliceStationButton = ArrestTab:CreateButton({
        ArrestStatusLabel:Set("Status: Teleported to Police Station!")
    end,
 })
-
--- Info label under Police Station button
-ArrestTab:CreateLabel("Become Police first")
 
 -- ==================== CHRISTMAS TAB ====================
 local ChristmasTab = Window:CreateTab("Christmas", 4483362458)
@@ -1332,6 +1256,196 @@ ChristmasTab:CreateToggle({
            task.spawn(runAutoPresent)
        else
            PresentStatusLabel:Set("Status: Auto-Present Disabled")
+       end
+   end,
+})
+
+-- ==================== COOKIE STACK FARM ====================
+local cookieStackEnabled = false
+local cookieStackRunning = false
+
+-- Cookie Stack Status Labels
+local CookieStackStatusLabel = ChristmasTab:CreateLabel("Present Status: Idle")
+local CookieStackTimerLabel = ChristmasTab:CreateLabel("Present Timer: --:--")
+
+-- Cookie Stack coordinates
+local cookieGroundPos = Vector3.new(-130, 16, -1592)
+local cookieSkyPos = Vector3.new(-130, 5000, -1592)
+
+-- Function to update cookie timer display
+local function updateCookieTimer(timeRemaining)
+    if timeRemaining > 0 then
+        local minutes = math.floor(timeRemaining / 60)
+        local seconds = math.floor(timeRemaining % 60)
+        CookieStackTimerLabel:Set(string.format("Present Timer: %02d:%02d", minutes, seconds))
+    else
+        CookieStackTimerLabel:Set("Present Timer: COLLECTING")
+    end
+end
+
+-- Main Cookie Stack Farm Function
+local function runCookieStackFarm()
+    if cookieStackRunning then return end
+    cookieStackRunning = true
+    
+    CookieStackStatusLabel:Set("Status: Present Stack Farm Started!")
+    
+    while cookieStackEnabled do
+        -- Start 10 minute timer
+        local farmDuration = 600 -- 10 minutes in seconds
+        local farmStartTime = tick()
+        
+        CookieStackStatusLabel:Set("Status: Starting 10 minute present stacking...")
+        
+        -- Teleport to ground position first
+        local char = player.Character
+        if char then
+            local root = char:FindFirstChild("HumanoidRootPart")
+            if root then
+                root.CFrame = CFrame.new(cookieGroundPos)
+                
+                -- Reset velocities
+                for _, part in pairs(char:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                        part.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                    end
+                end
+            end
+        end
+        
+        task.wait(0.5)
+        
+        -- Farm for 10 minutes
+        while cookieStackEnabled and (tick() - farmStartTime) < farmDuration do
+            local timeRemaining = farmDuration - (tick() - farmStartTime)
+            updateCookieTimer(timeRemaining)
+            
+            CookieStackStatusLabel:Set("Status: Present stacking in progress...")
+            
+            -- Get fresh character reference
+            char = player.Character
+            if char then
+                local root = char:FindFirstChild("HumanoidRootPart")
+                if root then
+                    -- Teleport to sky position
+                    root.CFrame = CFrame.new(cookieSkyPos)
+                    
+                    -- Reset velocities
+                    for _, part in pairs(char:GetDescendants()) do
+                        if part:IsA("BasePart") then
+                            part.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                            part.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                        end
+                    end
+                    
+                    -- Freeze for 3 second
+                    freezeCharacter(true)
+                    task.wait(3)
+                    
+                    -- Unfreeze
+                    completelyUnfreezeCharacter()
+                    
+                    -- Teleport back to ground
+                    root.CFrame = CFrame.new(cookieGroundPos)
+                    
+                    -- Reset velocities again
+                    for _, part in pairs(char:GetDescendants()) do
+                        if part:IsA("BasePart") then
+                            part.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                            part.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                        end
+                    end
+                end
+            end
+            
+            task.wait(3)
+        end
+        
+        if not cookieStackEnabled then
+            break
+        end
+        
+        -- 10 minutes complete, now collect presents
+        CookieStackStatusLabel:Set("Status: 10 minutes complete! Starting present collection...")
+        CookieStackTimerLabel:Set("Present Timer: COLLECTING")
+        
+        -- Get all present spawners
+        local spawners = getAllPresentSpawners()
+        local totalSpawners = #spawners
+        
+        if totalSpawners == 0 then
+            CookieStackStatusLabel:Set("Status: No Present Spawners found! Restarting cycle...")
+            task.wait(5)
+            continue
+        end
+        
+        CookieStackStatusLabel:Set(string.format("Status: Collecting %d presents...", totalSpawners))
+        
+        -- Visit each spawner
+        for i, spawner in ipairs(spawners) do
+            if not cookieStackEnabled then
+                break
+            end
+            
+            local spawnerPos = getSpawnerPosition(spawner)
+            
+            if spawnerPos then
+                CookieStackStatusLabel:Set(string.format("Status: Collecting Present %d/%d...", i, totalSpawners))
+                
+                -- Get fresh character reference
+                char = player.Character
+                if char then
+                    local root = char:FindFirstChild("HumanoidRootPart")
+                    if root then
+                        -- Teleport to spawner position (slightly above to prevent clipping)
+                        local targetPos = spawnerPos + Vector3.new(0, 3, 0)
+                        root.CFrame = CFrame.new(targetPos)
+                        
+                        -- Reset velocities
+                        for _, part in pairs(char:GetDescendants()) do
+                            if part:IsA("BasePart") then
+                                part.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                                part.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                            end
+                        end
+                    end
+                end
+                
+                -- Wait 0.3 seconds before next teleport
+                task.wait(0.3)
+            end
+        end
+        
+        if not cookieStackEnabled then
+            break
+        end
+        
+        -- All presents collected, restart the cycle
+        CookieStackStatusLabel:Set("Status: All presents collected! Restarting 10 minute cycle...")
+        task.wait(2)
+    end
+    
+    completelyUnfreezeCharacter()
+    CookieStackStatusLabel:Set("Present Status: Idle")
+    CookieStackTimerLabel:Set("Present Timer: --:--")
+    cookieStackRunning = false
+end
+
+-- Cookie Stack Farm Toggle
+ChristmasTab:CreateToggle({
+   Name = "Present Stack Farm",
+   CurrentValue = false,
+   Flag = "CookieStackToggle",
+   Callback = function(Value)
+       cookieStackEnabled = Value
+       
+       if Value then
+           CookieStackStatusLabel:Set("Present Status: Present Stack Farm Enabled!")
+           task.spawn(runCookieStackFarm)
+       else
+           CookieStackStatusLabel:Set("Present Status: Present Stack Farm Disabled")
+           CookieStackTimerLabel:Set("Present Timer: --:--")
        end
    end,
 })
