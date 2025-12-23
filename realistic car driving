@@ -249,12 +249,12 @@ spawn(function()
     end
 end)
 
--- Teleport loop - Teleports every 10 seconds
+-- Teleport loop - Teleports every 5 seconds
 spawn(function()
     while true do
         if autofarmActive and not isCurrentlyTeleporting then
             teleportCarToBaseplate()
-            wait(10) -- Teleport every 10 seconds
+            wait(5) -- Teleport every 5 seconds
         else
             wait(0.5)
         end
@@ -276,16 +276,33 @@ local AutofarmToggle = MainTab:CreateToggle({
                 teleportCarToBaseplate()
             end
         else
+            -- STOP EVERYTHING IMMEDIATELY
             autofarmActive = false
             isCurrentlyTeleporting = false
+            
+            -- Force stop the car
+            local car, vehicleSeat = findPlayerCar()
+            if vehicleSeat then
+                vehicleSeat.ThrottleFloat = 0
+                vehicleSeat.Throttle = 0
+            end
+            
             -- Unanchor car when stopping to prevent freezing
-            wait(0.2)
+            wait(0.1)
             unanchorCar()
+            
+            -- Additional cleanup - clear velocities
+            if car then
+                for _, desc in pairs(car:GetDescendants()) do
+                    if desc:IsA("BasePart") then
+                        desc.Velocity = Vector3.new(0, 0, 0)
+                        desc.RotVelocity = Vector3.new(0, 0, 0)
+                    end
+                end
+            end
         end
     end,
 })
-
-MainTab:CreateLabel("Get in your car first.")
 
 -- Create Button
 local TeleportButton = MainTab:CreateButton({
