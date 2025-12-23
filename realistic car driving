@@ -1,0 +1,296 @@
+-- Rayfield UI Library
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+-- Create Window
+local Window = Rayfield:CreateWindow({
+    Name = "Rafso Realistic Car Driving",
+    LoadingTitle = "I'm lazy",
+    LoadingSubtitle = "by Rafso",
+    ConfigurationSaving = {
+        Enabled = false,
+        FolderName = nil,
+        FileName = "GiftTeleporter"
+    },
+    Discord = {
+        Enabled = false,
+    },
+    KeySystem = false,
+})
+
+-- Create Main Tab
+local MainTab = Window:CreateTab("Main", 4483362458)
+
+-- Teleport Function
+local function teleportToAllGifts()
+    local player = game.Players.LocalPlayer
+    local character = player.Character or player.CharacterAdded:Wait()
+    local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+    
+    local collectableFolder = game.Workspace:FindFirstChild("CollectableFolder")
+    
+    if not collectableFolder then
+        return
+    end
+    
+    local gifts = collectableFolder:GetChildren()
+    local giftCount = #gifts
+    
+    if giftCount == 0 then
+        return
+    end
+    
+    local teleportedCount = 0
+    
+    for i, gift in pairs(gifts) do
+        if gift:IsA("Model") or gift:IsA("BasePart") then
+            local targetPosition
+            
+            -- If it's a Model, find its primary part or first part
+            if gift:IsA("Model") then
+                targetPosition = gift:GetPivot().Position
+            else
+                targetPosition = gift.Position
+            end
+            
+            -- Teleport with slight offset above the gift
+            humanoidRootPart.CFrame = CFrame.new(targetPosition + Vector3.new(0, 5, 0))
+            teleportedCount = teleportedCount + 1
+            
+            wait(0.5) -- Wait half a second at each gift
+        end
+    end
+end
+
+-- Delete old baseplates if they exist
+if workspace:FindFirstChild("AutofarmBaseplate") then
+    workspace.AutofarmBaseplate:Destroy()
+end
+if workspace:FindFirstChild("AutofarmBaseplate2") then
+    workspace.AutofarmBaseplate2:Destroy()
+end
+if workspace:FindFirstChild("AutofarmBaseplate3") then
+    workspace.AutofarmBaseplate3:Destroy()
+end
+
+-- Create first baseplate (2000 studs)
+local baseplate1 = Instance.new("Part")
+baseplate1.Name = "AutofarmBaseplate"
+baseplate1.Size = Vector3.new(2000, 10, 500)
+baseplate1.Position = Vector3.new(-1700, 937, 3346)
+baseplate1.Anchored = true
+baseplate1.CanCollide = true
+baseplate1.Material = Enum.Material.Slate
+baseplate1.BrickColor = BrickColor.new("Dark stone grey")
+baseplate1.TopSurface = Enum.SurfaceType.Smooth
+baseplate1.BottomSurface = Enum.SurfaceType.Smooth
+baseplate1.Parent = workspace
+
+-- Create second baseplate (2000 studs) - continues from first
+local baseplate2 = Instance.new("Part")
+baseplate2.Name = "AutofarmBaseplate2"
+baseplate2.Size = Vector3.new(2000, 10, 500)
+baseplate2.Position = Vector3.new(-3700, 937, 3346) -- Position: -1700 - 2000 = -3700
+baseplate2.Anchored = true
+baseplate2.CanCollide = true
+baseplate2.Material = Enum.Material.Slate
+baseplate2.BrickColor = BrickColor.new("Dark stone grey")
+baseplate2.TopSurface = Enum.SurfaceType.Smooth
+baseplate2.BottomSurface = Enum.SurfaceType.Smooth
+baseplate2.Parent = workspace
+
+-- Create third baseplate (1000 studs) - final extension to reach 5000 total
+local baseplate3 = Instance.new("Part")
+baseplate3.Name = "AutofarmBaseplate3"
+baseplate3.Size = Vector3.new(1000, 10, 500)
+baseplate3.Position = Vector3.new(-5200, 937, 3346) -- Position: -3700 - 1500 = -5200
+baseplate3.Anchored = true
+baseplate3.CanCollide = true
+baseplate3.Material = Enum.Material.Slate
+baseplate3.BrickColor = BrickColor.new("Dark stone grey")
+baseplate3.TopSurface = Enum.SurfaceType.Smooth
+baseplate3.BottomSurface = Enum.SurfaceType.Smooth
+baseplate3.Parent = workspace
+
+-- Debug: Print baseplate info
+print("Baseplate 1 Size:", baseplate1.Size, "Position:", baseplate1.Position)
+print("Baseplate 2 Size:", baseplate2.Size, "Position:", baseplate2.Position)
+print("Baseplate 3 Size:", baseplate3.Size, "Position:", baseplate3.Position)
+print("Total Length: 5000 studs")
+
+local autofarmActive = false
+local isCurrentlyTeleporting = false
+
+-- Function to find player's car
+local function findPlayerCar()
+    local player = game.Players.LocalPlayer
+    
+    -- Search for any car model that contains the player's name
+    for _, obj in pairs(workspace:GetChildren()) do
+        if obj:IsA("Model") and string.find(obj.Name, player.Name) and string.find(obj.Name:lower(), "car") then
+            local vehicleSeat = obj:FindFirstChildWhichIsA("VehicleSeat", true)
+            if vehicleSeat then
+                return obj, vehicleSeat
+            end
+        end
+    end
+    
+    return nil, nil
+end
+
+-- Function to safely unanchor all car parts
+local function unanchorCar()
+    local car = findPlayerCar()
+    if not car then return end
+    
+    for _, desc in pairs(car:GetDescendants()) do
+        if desc:IsA("BasePart") and desc.Anchored then
+            desc.Anchored = false
+            desc.Velocity = Vector3.new(0, 0, 0)
+            desc.RotVelocity = Vector3.new(0, 0, 0)
+        end
+    end
+end
+
+-- Function to teleport car using anchor method with fixed rotation and VELOCITY PRESERVATION
+local function teleportCarToBaseplate()
+    if isCurrentlyTeleporting then return false end
+    if not autofarmActive then return false end
+    
+    isCurrentlyTeleporting = true
+    
+    local car, vehicleSeat = findPlayerCar()
+    
+    if not car or not vehicleSeat then
+        isCurrentlyTeleporting = false
+        return false
+    end
+    
+    -- Store current velocity before teleporting
+    local currentVelocity = vehicleSeat.Velocity
+    local currentSpeed = currentVelocity.Magnitude
+    
+    -- Collect all parts and their anchor states
+    local parts = {}
+    for _, desc in pairs(car:GetDescendants()) do
+        if desc:IsA("BasePart") then
+            table.insert(parts, {part = desc, wasAnchored = desc.Anchored})
+        end
+    end
+    
+    if #parts == 0 then 
+        isCurrentlyTeleporting = false
+        return false 
+    end
+    
+    -- Find the VehicleSeat to use as reference
+    local referencePart = vehicleSeat
+    local currentCFrame = referencePart.CFrame
+    
+    -- Target position and rotation (facing the highway = 90 degrees = math.rad(90))
+    local targetPos = Vector3.new(-712, 945, 3346) -- Edge of baseplate
+    local targetCFrame = CFrame.new(targetPos) * CFrame.Angles(0, math.rad(90), 0)
+    
+    -- Calculate the forward velocity direction based on target rotation
+    local forwardDirection = targetCFrame.LookVector
+    local targetVelocity = forwardDirection * currentSpeed
+    
+    -- Anchor all parts
+    for _, data in pairs(parts) do
+        data.part.Anchored = true
+    end
+    
+    wait(0.03)
+    
+    -- Move all parts relative to the VehicleSeat's new position
+    for _, data in pairs(parts) do
+        local partOffset = currentCFrame:Inverse() * data.part.CFrame
+        data.part.CFrame = targetCFrame * partOffset
+    end
+    
+    wait(0.03)
+    
+    -- Unanchor all parts and restore velocity in the new direction
+    for _, data in pairs(parts) do
+        data.part.Anchored = false -- Always unanchor, don't restore anchored state
+        -- Apply velocity in the forward direction to maintain speed
+        data.part.Velocity = targetVelocity
+        data.part.RotVelocity = Vector3.new(0, 0, 0)
+    end
+    
+    isCurrentlyTeleporting = false
+    return true
+end
+
+-- Function to simulate key press (W key for acceleration)
+local function pressWKey()
+    local VirtualInputManager = game:GetService("VirtualInputManager")
+    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.W, false, game)
+end
+
+-- Main autofarm loop - Sets throttle constantly
+spawn(function()
+    while true do
+        wait(0.05) -- Loop very fast to constantly set throttle
+        
+        if autofarmActive and not isCurrentlyTeleporting then
+            local car, vehicleSeat = findPlayerCar()
+            if vehicleSeat then
+                vehicleSeat.ThrottleFloat = 1
+                vehicleSeat.Throttle = 1
+                pressWKey()
+            end
+        else
+            local car, vehicleSeat = findPlayerCar()
+            if vehicleSeat then
+                vehicleSeat.ThrottleFloat = 0
+                vehicleSeat.Throttle = 0
+            end
+        end
+    end
+end)
+
+-- Teleport loop - Teleports every 10 seconds
+spawn(function()
+    while true do
+        if autofarmActive and not isCurrentlyTeleporting then
+            teleportCarToBaseplate()
+            wait(10) -- Teleport every 10 seconds
+        else
+            wait(0.5)
+        end
+    end
+end)
+
+-- Autofarm Toggle
+local AutofarmToggle = MainTab:CreateToggle({
+    Name = "Autofarm",
+    CurrentValue = false,
+    Flag = "AutofarmToggle",
+    Callback = function(Value)
+        if Value then
+            autofarmActive = true
+            -- Make sure car is fully unanchored before starting
+            unanchorCar()
+            wait(0.5) -- Wait for car to be fully loaded before first teleport
+            if autofarmActive then -- Check again in case it was toggled off during wait
+                teleportCarToBaseplate()
+            end
+        else
+            autofarmActive = false
+            isCurrentlyTeleporting = false
+            -- Unanchor car when stopping to prevent freezing
+            wait(0.2)
+            unanchorCar()
+        end
+    end,
+})
+
+MainTab:CreateLabel("Get in your car first.")
+
+-- Create Button
+local TeleportButton = MainTab:CreateButton({
+    Name = "Teleport to all 30 Gifts",
+    Callback = function()
+        teleportToAllGifts()
+    end,
+})
