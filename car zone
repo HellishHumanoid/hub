@@ -656,7 +656,7 @@ local function startAutoBeamrush()
 end
 
 local AutoBeamrushToggle = MainTab:CreateToggle({
-    Name = "Auto-Beamrush",
+    Name = "Auto-Beamrush [GLITCHY]",
     CurrentValue = false,
     Flag = "AutoBeamrushToggle",
     Callback = function(Value)
