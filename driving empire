@@ -1452,7 +1452,7 @@ ChristmasTab:CreateToggle({
 
 -- Teleport to all 20 Elfs Button
 ChristmasTab:CreateButton({
-   Name = "Teleport to all 20 Elfs",
+   Name = "Teleport to all 20 Elves",
    Callback = function()
        task.spawn(function()
            local success, result = pcall(function()
