@@ -1,0 +1,1249 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+   Name = "Rafso Dandy's World",
+   LoadingTitle = "I really don't know",
+   LoadingSubtitle = "by Rafso",
+   ConfigurationSaving = {
+      Enabled = false,
+      FolderName = nil,
+      FileName = "RafsoStuff"
+   },
+   Discord = {
+      Enabled = false,
+      Invite = "noinvitelink",
+      RememberJoins = true
+   },
+   KeySystem = false
+})
+
+local MainTab = Window:CreateTab("Main", 4483362458)
+local ESPTab = Window:CreateTab("ESP", 4483362458)
+local MiscTab = Window:CreateTab("Misc", 4483362458)
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local TweenService = game:GetService("TweenService")
+
+local player = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+local collectingTapes = false
+local collectingCapsules = false
+local collectingOrnaments = false
+local collectingItems = false
+local originalCFrame = nil
+local originalCameraType = nil
+local cameraConnection = nil
+local walkspeedEnabled = false
+local walkspeedConnection = nil
+local autoSkillcheck1Enabled = false
+local skillcheckConnection = nil
+local skillcheckDelayActive = false
+local autoSkillcheck2Enabled = false
+local skillcheck2Connection = nil
+local skillcheck2DelayActive = false
+local autoJumpTreadmillEnabled = false
+local noclipEnabled = false
+local noclipConnection = nil
+local processedParts = {}
+local currentRoomName = nil
+local roomMonitorConnection = nil
+local childAddedConnection = nil
+local childRemovedConnection = nil
+local generatorLightConnections = {}
+local autoJumpConnection = nil
+
+-- ESP Variables
+local generatorESPEnabled = false
+local monsterESPEnabled = false
+local playerESPEnabled = false
+local elevatorESPEnabled = false
+local generatorHighlights = {}
+local monsterHighlights = {}
+local playerHighlights = {}
+local elevatorHighlights = {}
+
+local function findItems(itemType)
+    local items = {}
+    local currentRoom = workspace:FindFirstChild("CurrentRoom")
+    
+    if not currentRoom then
+        return items
+    end
+    
+    -- Find the Model inside CurrentRoom
+    local roomModel = nil
+    for _, child in pairs(currentRoom:GetChildren()) do
+        if child:IsA("Model") then
+            roomModel = child
+            break
+        end
+    end
+    
+    if not roomModel then
+        return items
+    end
+    
+    -- Look for Items folder
+    local itemsFolder = roomModel:FindFirstChild("Items")
+    if not itemsFolder then
+        return items
+    end
+    
+    -- Find items based on type
+    for _, item in pairs(itemsFolder:GetChildren()) do
+        if itemType == "Tape" and item.Name == "Tape" then
+            if item:IsA("BasePart") then
+                table.insert(items, item)
+            elseif item:IsA("Model") then
+                local part = item.PrimaryPart or item:FindFirstChildWhichIsA("BasePart", true)
+                if part then
+                    table.insert(items, part)
+                end
+            end
+        elseif itemType == "ResearchCapsule" and item.Name == "ResearchCapsule" then
+            if item:IsA("BasePart") then
+                table.insert(items, item)
+            elseif item:IsA("Model") then
+                local part = item.PrimaryPart or item:FindFirstChildWhichIsA("BasePart", true)
+                if part then
+                    table.insert(items, part)
+                end
+            end
+        elseif itemType == "HolidayCollectibleItem" and item.Name == "HolidayCollectibleItem" then
+            if item:IsA("BasePart") then
+                table.insert(items, item)
+            elseif item:IsA("Model") then
+                local part = item.PrimaryPart or item:FindFirstChildWhichIsA("BasePart", true)
+                if part then
+                    table.insert(items, part)
+                end
+            end
+        elseif itemType == "Other" and item.Name ~= "Tape" and item.Name ~= "ResearchCapsule" and item.Name ~= "HolidayCollectibleItem" then
+            if item:IsA("BasePart") then
+                table.insert(items, item)
+            elseif item:IsA("Model") then
+                local part = item.PrimaryPart or item:FindFirstChildWhichIsA("BasePart", true)
+                if part then
+                    table.insert(items, part)
+                end
+            end
+        end
+    end
+    
+    return items
+end
+
+local function findProximityPrompt(item)
+    local prompt = item:FindFirstChildOfClass("ProximityPrompt")
+    if prompt then
+        return prompt
+    end
+    
+    if item.Parent and item.Parent:IsA("Model") then
+        prompt = item.Parent:FindFirstChildOfClass("ProximityPrompt", true)
+        if prompt then
+            return prompt
+        end
+    end
+    
+    return nil
+end
+
+local function collectItemsOfType(itemType, collectingFlag)
+    originalCFrame = nil
+    originalCameraType = camera.CameraType
+    
+    while collectingFlag() do
+        local items = findItems(itemType)
+        
+        if #items == 0 then
+            task.wait(0.5)
+            continue
+        end
+        
+        local item = items[1]
+        
+        if item and item.Parent then
+            local character = player.Character
+            if character and character:FindFirstChild("HumanoidRootPart") then
+                local humanoidRootPart = character.HumanoidRootPart
+                
+                if not originalCFrame then
+                    originalCFrame = humanoidRootPart.CFrame
+                end
+                
+                camera.CameraType = Enum.CameraType.Scriptable
+                
+                if cameraConnection then
+                    cameraConnection:Disconnect()
+                end
+                
+                local cameraHeight = 4
+                
+                cameraConnection = RunService.RenderStepped:Connect(function()
+                    if item and item.Parent then
+                        local itemPos = item.Position
+                        local cameraPos = itemPos + Vector3.new(0, cameraHeight, 0)
+                        camera.CFrame = CFrame.new(cameraPos, itemPos)
+                        camera.Focus = CFrame.new(itemPos)
+                    end
+                end)
+                
+                local maxAttempts = 50
+                local attempts = 0
+                
+                while item and item.Parent and attempts < maxAttempts and collectingFlag() do
+                    local itemPosition = item.Position
+                    local lookDirection = (itemPosition - humanoidRootPart.Position).Unit
+                    local offsetPosition = itemPosition - (lookDirection * 1)
+                    
+                    if humanoidRootPart and humanoidRootPart.Parent then
+                        humanoidRootPart.CFrame = CFrame.new(offsetPosition, itemPosition)
+                    end
+                    
+                    local prompt = findProximityPrompt(item)
+                    
+                    if prompt and prompt.Parent then
+                        for i = 1, 3 do
+                            pcall(function()
+                                fireproximityprompt(prompt)
+                            end)
+                            task.wait(0.03)
+                        end
+                    end
+                    
+                    task.wait(0.05)
+                    attempts = attempts + 1
+                    
+                    if not item.Parent then
+                        break
+                    end
+                end
+                
+                if cameraConnection then
+                    cameraConnection:Disconnect()
+                    cameraConnection = nil
+                end
+                
+                camera.CameraType = originalCameraType or Enum.CameraType.Custom
+                
+                task.wait(0.2)
+            end
+        end
+        
+        task.wait(0.1)
+    end
+    
+    local character = player.Character
+    if character and character:FindFirstChild("HumanoidRootPart") and originalCFrame then
+        character.HumanoidRootPart.CFrame = originalCFrame
+    end
+    
+    if cameraConnection then
+        cameraConnection:Disconnect()
+        cameraConnection = nil
+    end
+    
+    camera.CameraType = originalCameraType or Enum.CameraType.Custom
+end
+
+-- ESP Functions
+local function createHighlight(object, color)
+    -- Check if highlight already exists
+    local existingHighlight = object:FindFirstChildOfClass("Highlight")
+    if existingHighlight then
+        return existingHighlight
+    end
+    
+    local highlight = Instance.new("Highlight")
+    highlight.Adornee = object
+    highlight.FillColor = color
+    highlight.OutlineColor = color
+    highlight.FillTransparency = 0.5
+    highlight.OutlineTransparency = 0
+    highlight.Parent = object
+    return highlight
+end
+
+local function clearHighlights(highlightTable)
+    for _, highlight in pairs(highlightTable) do
+        if highlight and highlight.Parent then
+            highlight:Destroy()
+        end
+    end
+    table.clear(highlightTable)
+end
+
+-- Function to check if generator light is Sea Green (completed)
+local function isGeneratorCompleted(generator)
+    -- Check regular Light
+    local light = generator:FindFirstChild("Light")
+    if light and light:IsA("BasePart") then
+        local color = light.Color
+        local r = math.floor(color.R * 255 + 0.5)
+        local g = math.floor(color.G * 255 + 0.5)
+        local b = math.floor(color.B * 255 + 0.5)
+        
+        if math.abs(r - 57) <= 5 and 
+           math.abs(g - 165) <= 5 and 
+           math.abs(b - 56) <= 5 then
+            return true
+        end
+    end
+    
+    -- Check TreadmillGame Light (if it exists)
+    local treadmillGame = generator:FindFirstChild("TreadmillGame")
+    if treadmillGame then
+        local treadmillLight = treadmillGame:FindFirstChild("Light")
+        if treadmillLight then
+            local innerLight = treadmillLight:FindFirstChild("Light")
+            if innerLight and innerLight:IsA("BasePart") then
+                local color = innerLight.Color
+                local r = math.floor(color.R * 255 + 0.5)
+                local g = math.floor(color.G * 255 + 0.5)
+                local b = math.floor(color.B * 255 + 0.5)
+                
+                if math.abs(r - 57) <= 5 and 
+                   math.abs(g - 165) <= 5 and 
+                   math.abs(b - 56) <= 5 then
+                    return true
+                end
+            end
+        end
+    end
+    
+    return false
+end
+
+local function updateGeneratorESP()
+    if not generatorESPEnabled then
+        return
+    end
+    
+    print("[ESP] Updating Generator ESP...")
+    -- Search for Generators folder
+    local currentRoom = workspace:FindFirstChild("CurrentRoom")
+    if currentRoom then
+        for _, roomModel in pairs(currentRoom:GetChildren()) do
+            if roomModel:IsA("Model") then
+                print("[ESP] Checking room model:", roomModel.Name)
+                local generators = roomModel:FindFirstChild("Generators")
+                if generators then
+                    print("[ESP] Found Generators folder with", #generators:GetChildren(), "generators")
+                    for _, generator in pairs(generators:GetChildren()) do
+                        -- Skip if generator is completed
+                        if not isGeneratorCompleted(generator) then
+                            -- Look for "Model" inside the generator
+                            local generatorModel = generator:FindFirstChild("Model")
+                            local targetObject = generatorModel or generator
+                            
+                            if (targetObject:IsA("Model") or targetObject:IsA("BasePart")) and not targetObject:FindFirstChildOfClass("Highlight") then
+                                pcall(function()
+                                    local highlight = createHighlight(targetObject, Color3.fromRGB(255, 255, 255))
+                                    table.insert(generatorHighlights, highlight)
+                                    print("[ESP] Added highlight to generator:", generator.Name)
+                                end)
+                            end
+                        else
+                            print("[ESP] Skipping completed generator:", generator.Name)
+                        end
+                    end
+                else
+                    print("[ESP] No Generators folder found in", roomModel.Name)
+                end
+            end
+        end
+    else
+        print("[ESP] CurrentRoom not found!")
+    end
+end
+
+local function updateMonsterESP()
+    if not monsterESPEnabled then
+        return
+    end
+    
+    print("[ESP] Updating Monster ESP...")
+    local currentRoom = workspace:FindFirstChild("CurrentRoom")
+    if currentRoom then
+        for _, roomModel in pairs(currentRoom:GetChildren()) do
+            if roomModel:IsA("Model") then
+                print("[ESP] Checking room model for monsters:", roomModel.Name)
+                local monsters = roomModel:FindFirstChild("Monsters")
+                if monsters then
+                    print("[ESP] Found Monsters folder with", #monsters:GetChildren(), "monsters")
+                    for _, monster in pairs(monsters:GetChildren()) do
+                        if (monster:IsA("Model") or monster:IsA("BasePart")) and not monster:FindFirstChildOfClass("Highlight") then
+                            pcall(function()
+                                local highlight = createHighlight(monster, Color3.fromRGB(255, 0, 0))
+                                table.insert(monsterHighlights, highlight)
+                                print("[ESP] Added highlight to monster:", monster.Name)
+                            end)
+                        end
+                    end
+                else
+                    print("[ESP] No Monsters folder found in", roomModel.Name)
+                end
+            end
+        end
+    else
+        print("[ESP] CurrentRoom not found!")
+    end
+end
+
+local function updatePlayerESP()
+    if not playerESPEnabled then
+        return
+    end
+    
+    local inGamePlayers = workspace:FindFirstChild("InGamePlayers")
+    if inGamePlayers then
+        for _, playerModel in pairs(inGamePlayers:GetChildren()) do
+            if playerModel:IsA("Model") and playerModel.Name ~= player.Name and not playerModel:FindFirstChildOfClass("Highlight") then
+                pcall(function()
+                    local highlight = createHighlight(playerModel, Color3.fromRGB(0, 255, 0))
+                    table.insert(playerHighlights, highlight)
+                end)
+            end
+        end
+    end
+end
+
+local function updateElevatorESP()
+    if not elevatorESPEnabled then
+        return
+    end
+    
+    local elevators = workspace:FindFirstChild("Elevators")
+    if elevators then
+        for _, elevator in pairs(elevators:GetChildren()) do
+            if (elevator:IsA("Model") or elevator:IsA("BasePart")) and not elevator:FindFirstChildOfClass("Highlight") then
+                pcall(function()
+                    local highlight = createHighlight(elevator, Color3.fromRGB(0, 255, 255))
+                    table.insert(elevatorHighlights, highlight)
+                end)
+            end
+        end
+    end
+end
+
+-- Function to monitor generator light color changes
+local function monitorGeneratorLights()
+    -- Clear old connections
+    for _, connection in pairs(generatorLightConnections) do
+        if connection then
+            connection:Disconnect()
+        end
+    end
+    table.clear(generatorLightConnections)
+    
+    if not generatorESPEnabled then
+        return
+    end
+    
+    local currentRoom = workspace:FindFirstChild("CurrentRoom")
+    if currentRoom then
+        for _, roomModel in pairs(currentRoom:GetChildren()) do
+            if roomModel:IsA("Model") then
+                local generators = roomModel:FindFirstChild("Generators")
+                if generators then
+                    for _, generator in pairs(generators:GetChildren()) do
+                        -- Monitor regular Light
+                        local light = generator:FindFirstChild("Light")
+                        if light and light:IsA("BasePart") then
+                            -- Monitor color changes
+                            local connection = light:GetPropertyChangedSignal("Color"):Connect(function()
+                                task.wait(0.1) -- Small delay to ensure color has fully changed
+                                if isGeneratorCompleted(generator) then
+                                    -- Remove highlight if generator just completed
+                                    local generatorModel = generator:FindFirstChild("Model")
+                                    local targetObject = generatorModel or generator
+                                    
+                                    -- Find and remove highlight
+                                    for _, child in pairs(targetObject:GetChildren()) do
+                                        if child:IsA("Highlight") then
+                                            child:Destroy()
+                                            -- Remove from table
+                                            for i = #generatorHighlights, 1, -1 do
+                                                if generatorHighlights[i] == child or not generatorHighlights[i].Parent then
+                                                    table.remove(generatorHighlights, i)
+                                                end
+                                            end
+                                            break
+                                        end
+                                    end
+                                end
+                            end)
+                            table.insert(generatorLightConnections, connection)
+                        end
+                        
+                        -- Monitor TreadmillGame Light (if it exists)
+                        local treadmillGame = generator:FindFirstChild("TreadmillGame")
+                        if treadmillGame then
+                            local treadmillLight = treadmillGame:FindFirstChild("Light")
+                            if treadmillLight then
+                                local innerLight = treadmillLight:FindFirstChild("Light")
+                                if innerLight and innerLight:IsA("BasePart") then
+                                    -- Monitor color changes on treadmill light
+                                    local connection = innerLight:GetPropertyChangedSignal("Color"):Connect(function()
+                                        task.wait(0.1) -- Small delay to ensure color has fully changed
+                                        if isGeneratorCompleted(generator) then
+                                            -- Remove highlight if generator just completed
+                                            local generatorModel = generator:FindFirstChild("Model")
+                                            local targetObject = generatorModel or generator
+                                            
+                                            -- Find and remove highlight
+                                            for _, child in pairs(targetObject:GetChildren()) do
+                                                if child:IsA("Highlight") then
+                                                    child:Destroy()
+                                                    -- Remove from table
+                                                    for i = #generatorHighlights, 1, -1 do
+                                                        if generatorHighlights[i] == child or not generatorHighlights[i].Parent then
+                                                            table.remove(generatorHighlights, i)
+                                                        end
+                                                    end
+                                                    break
+                                                end
+                                            end
+                                        end
+                                    end)
+                                    table.insert(generatorLightConnections, connection)
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- Noclip Functions (defined early to avoid nil errors)
+local function isFloorPart(part)
+    local name = part.Name:lower()
+    
+    -- Check the part's own name
+    if name:find("floor") or name:find("stair") then
+        return true
+    end
+    
+    -- Check if the part's parent is named Stairs
+    if part.Parent and part.Parent.Name == "Stairs" then
+        return true
+    end
+    
+    return false
+end
+
+local function processWallPart(part)
+    if not part:IsA("BasePart") then
+        return
+    end
+    
+    -- Skip if it's a floor or stair part
+    if isFloorPart(part) then
+        return
+    end
+    
+    -- Only process if not already processed (to reduce lag)
+    if processedParts[part] ~= nil then
+        return
+    end
+    
+    -- Store original CanCollide state
+    processedParts[part] = part.CanCollide
+    
+    -- Disable collision only if it was enabled
+    if part.CanCollide then
+        part.CanCollide = false
+    end
+end
+
+local function processWallsFolder(wallsFolder)
+    if not wallsFolder then
+        return
+    end
+    
+    for _, child in pairs(wallsFolder:GetDescendants()) do
+        if child:IsA("BasePart") and processedParts[child] == nil then
+            processWallPart(child)
+        end
+    end
+end
+
+local function restoreCollisions()
+    for part, originalState in pairs(processedParts) do
+        if part and part.Parent then
+            part.CanCollide = originalState
+        end
+    end
+    table.clear(processedParts)
+end
+
+-- Forward declaration for updateNoclip
+local updateNoclip
+
+updateNoclip = function()
+    if not noclipEnabled then
+        return
+    end
+    
+    local currentRoom = workspace:FindFirstChild("CurrentRoom")
+    if not currentRoom then
+        return
+    end
+    
+    -- Process all models in CurrentRoom
+    for _, roomModel in pairs(currentRoom:GetChildren()) do
+        if roomModel:IsA("Model") then
+            -- Process Walls folder
+            local wallsFolder = roomModel:FindFirstChild("Walls")
+            if wallsFolder then
+                processWallsFolder(wallsFolder)
+            end
+            
+            -- Process FreeArea folder
+            local freeAreaFolder = roomModel:FindFirstChild("FreeArea")
+            if freeAreaFolder then
+                processWallsFolder(freeAreaFolder)
+            end
+        end
+    end
+end
+
+-- Function to refresh all ESPs and Noclip when room changes
+local function refreshForNewRoom()
+    -- Clear all highlights
+    clearHighlights(generatorHighlights)
+    clearHighlights(monsterHighlights)
+    clearHighlights(playerHighlights)
+    clearHighlights(elevatorHighlights)
+    
+    -- Clear noclip processed parts for new room
+    if noclipEnabled then
+        restoreCollisions()
+        -- Re-apply noclip to the new room
+        updateNoclip()
+    end
+    
+    -- Refresh ESPs if enabled
+    if generatorESPEnabled then
+        updateGeneratorESP()
+        monitorGeneratorLights()
+    end
+    if monsterESPEnabled then
+        updateMonsterESP()
+    end
+    if playerESPEnabled then
+        updatePlayerESP()
+    end
+    if elevatorESPEnabled then
+        updateElevatorESP()
+    end
+end
+
+-- Function to monitor room changes
+local function startRoomMonitoring()
+    -- Disconnect existing connections
+    if roomMonitorConnection then
+        roomMonitorConnection:Disconnect()
+        roomMonitorConnection = nil
+    end
+    if childAddedConnection then
+        childAddedConnection:Disconnect()
+        childAddedConnection = nil
+    end
+    if childRemovedConnection then
+        childRemovedConnection:Disconnect()
+        childRemovedConnection = nil
+    end
+    
+    -- Monitor when new models are added to CurrentRoom
+    local currentRoom = workspace:FindFirstChild("CurrentRoom")
+    if not currentRoom then
+        print("ERROR: CurrentRoom not found!")
+        return
+    end
+    
+    print("Starting room monitoring on:", currentRoom:GetFullName())
+    
+    -- Track the last refresh time to prevent multiple rapid refreshes
+    local lastRefreshTime = 0
+    local refreshCooldown = 1.5 -- seconds
+    
+    local function safeRefresh()
+        local currentTime = tick()
+        if currentTime - lastRefreshTime < refreshCooldown then
+            return -- Skip if we recently refreshed
+        end
+        lastRefreshTime = currentTime
+        
+        task.spawn(function()
+            -- Wait for room to start populating
+            task.wait(2)
+            print("Refreshing ESPs and Noclip for new room...")
+            refreshForNewRoom()
+            print("Refresh complete!")
+            
+            -- Do additional refreshes to catch late-loading objects
+            for i = 1, 3 do
+                task.wait(1)
+                print("Additional ESP refresh", i, "...")
+                if generatorESPEnabled then
+                    updateGeneratorESP()
+                    monitorGeneratorLights()
+                end
+                if monsterESPEnabled then
+                    updateMonsterESP()
+                end
+                if playerESPEnabled then
+                    updatePlayerESP()
+                end
+            end
+            print("All refreshes complete!")
+        end)
+    end
+    
+    -- Use ChildAdded to detect new room models
+    childAddedConnection = currentRoom.ChildAdded:Connect(function(child)
+        print("Child added to CurrentRoom:", child.Name, "Type:", child.ClassName)
+        if child:IsA("Model") then
+            local newRoomName = child.Name
+            print("New room model detected:", newRoomName, "Previous room:", currentRoomName or "none")
+            
+            if newRoomName ~= currentRoomName then
+                currentRoomName = newRoomName
+                print("=== Room changed to:", currentRoomName, "===")
+                safeRefresh()
+            end
+        end
+    end)
+    
+    -- Also monitor when models are removed (game ending/resetting)
+    childRemovedConnection = currentRoom.ChildRemoved:Connect(function(child)
+        print("Child removed from CurrentRoom:", child.Name, "Type:", child.ClassName)
+        if child:IsA("Model") and child.Name == currentRoomName then
+            print("=== Current room model removed, waiting for new room ===")
+            currentRoomName = nil
+            -- Clear highlights immediately when room is removed
+            clearHighlights(generatorHighlights)
+            clearHighlights(monsterHighlights)
+            clearHighlights(playerHighlights)
+            clearHighlights(elevatorHighlights)
+        end
+    end)
+    
+    -- BACKUP: Poll to catch any missed changes
+    local lastCheckedRoom = nil
+    roomMonitorConnection = RunService.Heartbeat:Connect(function()
+        local currentRoom = workspace:FindFirstChild("CurrentRoom")
+        if currentRoom then
+            local foundRoom = nil
+            for _, child in pairs(currentRoom:GetChildren()) do
+                if child:IsA("Model") then
+                    foundRoom = child.Name
+                    break
+                end
+            end
+            
+            -- If we found a room and it's different from what we know
+            if foundRoom and foundRoom ~= currentRoomName then
+                currentRoomName = foundRoom
+                print("=== BACKUP DETECTION: Room changed to:", currentRoomName, "===")
+                safeRefresh()
+            end
+            
+            lastCheckedRoom = foundRoom
+        end
+    end)
+    
+    -- Check initial room on script load
+    for _, child in pairs(currentRoom:GetChildren()) do
+        if child:IsA("Model") then
+            currentRoomName = child.Name
+            print("Initial room detected:", currentRoomName)
+            break
+        end
+    end
+end
+
+-- Auto-Jump for Treadmill Generators
+local function startTreadmillAutoJump()
+    if autoJumpConnection then
+        autoJumpConnection:Disconnect()
+    end
+    
+    autoJumpConnection = RunService.Heartbeat:Connect(function()
+        if not autoJumpTreadmillEnabled then
+            if autoJumpConnection then
+                autoJumpConnection:Disconnect()
+                autoJumpConnection = nil
+            end
+            return
+        end
+        
+        -- Check if TreadmillTapSkillCheckGui exists and is visible
+        local playerGui = player:FindFirstChild("PlayerGui")
+        if not playerGui then
+            return
+        end
+        
+        local treadmillGui = playerGui:FindFirstChild("TreadmillTapSkillCheckGui")
+        if not treadmillGui then
+            return
+        end
+        
+        -- Check if the GUI is enabled/visible
+        if not treadmillGui.Enabled then
+            return
+        end
+        
+        -- Spam Space key - press and release immediately
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
+    end)
+end
+
+-- Auto Skillcheck 1 Function (Original)
+local function checkSkillcheck()
+    local playerGui = player:WaitForChild("PlayerGui")
+    local screenGui = playerGui:FindFirstChild("ScreenGui")
+    
+    if not screenGui then
+        return false
+    end
+    
+    local menu = screenGui:FindFirstChild("Menu")
+    if not menu then
+        return false
+    end
+    
+    local skillCheckFrame = menu:FindFirstChild("SkillCheckFrame")
+    if not skillCheckFrame or not skillCheckFrame.Visible then
+        return false
+    end
+    
+    local marker = skillCheckFrame:FindFirstChild("Marker")
+    local goldArea = skillCheckFrame:FindFirstChild("GoldArea")
+    
+    if not marker or not goldArea then
+        return false
+    end
+    
+    -- Check if marker overlaps with goldArea
+    local markerPos = marker.AbsolutePosition
+    local markerSize = marker.AbsoluteSize
+    local goldPos = goldArea.AbsolutePosition
+    local goldSize = goldArea.AbsoluteSize
+    
+    -- Calculate marker bounds
+    local markerLeft = markerPos.X
+    local markerRight = markerPos.X + markerSize.X
+    local markerTop = markerPos.Y
+    local markerBottom = markerPos.Y + markerSize.Y
+    
+    -- Calculate goldArea bounds
+    local goldLeft = goldPos.X
+    local goldRight = goldPos.X + goldSize.X
+    local goldTop = goldPos.Y
+    local goldBottom = goldPos.Y + goldSize.Y
+    
+    -- Check for overlap
+    if markerRight >= goldLeft and markerLeft <= goldRight and
+       markerBottom >= goldTop and markerTop <= goldBottom then
+        return true
+    end
+    
+    return false
+end
+
+-- Auto Skillcheck 2 Function (Circle)
+local function checkCircleSkillcheck()
+    local playerGui = player:WaitForChild("PlayerGui")
+    local circleSkillCheckGui = playerGui:FindFirstChild("CircleSkillCheckGui")
+    
+    if not circleSkillCheckGui then
+        return false
+    end
+    
+    local skillCheckFrame = circleSkillCheckGui:FindFirstChild("SkillCheckFrame")
+    if not skillCheckFrame or not skillCheckFrame.Visible then
+        return false
+    end
+    
+    local container = skillCheckFrame:FindFirstChild("Container")
+    if not container then
+        return false
+    end
+    
+    local shrinkingCircle = container:FindFirstChild("ShrinkingCircle")
+    local yellowCircle = container:FindFirstChild("YellowCircle")
+    
+    if not shrinkingCircle or not yellowCircle then
+        return false
+    end
+    
+    -- Get the sizes to check if shrinking circle is within yellow circle range
+    local shrinkingSize = shrinkingCircle.AbsoluteSize
+    local yellowSize = yellowCircle.AbsoluteSize
+    
+    -- Check if shrinking circle size is close to yellow circle size (within range)
+    local sizeDifference = math.abs(shrinkingSize.X - yellowSize.X)
+    
+    -- If the difference is small enough, we're in the gold zone
+    if sizeDifference <= 20 then
+        return true
+    end
+    
+    return false
+end
+
+local function pressSpace()
+    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
+    task.wait(0.05)
+    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
+end
+
+-- Main Tab
+local AutoCheckToggle = MainTab:CreateToggle({
+   Name = "Auto-Check",
+   CurrentValue = false,
+   Flag = "AutoCheck",
+   Callback = function(Value)
+       autoSkillcheck1Enabled = Value
+       autoSkillcheck2Enabled = Value
+       autoJumpTreadmillEnabled = Value
+       
+       if Value then
+           -- Start Auto Skillcheck 1
+           if skillcheckConnection then
+               skillcheckConnection:Disconnect()
+           end
+           
+           skillcheckConnection = RunService.RenderStepped:Connect(function()
+               if autoSkillcheck1Enabled and not skillcheckDelayActive then
+                   if checkSkillcheck() then
+                       skillcheckDelayActive = true
+                       task.spawn(function()
+                           task.wait(0.05)
+                           pressSpace()
+                           skillcheckDelayActive = false
+                       end)
+                   end
+               end
+           end)
+           
+           -- Start Auto Skillcheck 2
+           if skillcheck2Connection then
+               skillcheck2Connection:Disconnect()
+           end
+           
+           skillcheck2Connection = RunService.RenderStepped:Connect(function()
+               if autoSkillcheck2Enabled and not skillcheck2DelayActive then
+                   if checkCircleSkillcheck() then
+                       skillcheck2DelayActive = true
+                       task.spawn(function()
+                           task.wait(0.1)
+                           pressSpace()
+                           skillcheck2DelayActive = false
+                       end)
+                   end
+               end
+           end)
+           
+           -- Start Auto Skillcheck 3 (Treadmill)
+           startTreadmillAutoJump()
+       else
+           -- Stop Auto Skillcheck 1
+           if skillcheckConnection then
+               skillcheckConnection:Disconnect()
+               skillcheckConnection = nil
+           end
+           skillcheckDelayActive = false
+           
+           -- Stop Auto Skillcheck 2
+           if skillcheck2Connection then
+               skillcheck2Connection:Disconnect()
+               skillcheck2Connection = nil
+           end
+           skillcheck2DelayActive = false
+           
+           -- Stop Auto Skillcheck 3 (Treadmill)
+           if autoJumpConnection then
+               autoJumpConnection:Disconnect()
+               autoJumpConnection = nil
+           end
+       end
+   end,
+})
+
+local TapeToggle = MainTab:CreateToggle({
+   Name = "Collect Tapes",
+   CurrentValue = false,
+   Flag = "CollectTapes",
+   Callback = function(Value)
+       collectingTapes = Value
+       
+       if Value then
+           task.spawn(function()
+               collectItemsOfType("Tape", function() return collectingTapes end)
+           end)
+       else
+           if cameraConnection then
+               cameraConnection:Disconnect()
+               cameraConnection = nil
+           end
+           camera.CameraType = Enum.CameraType.Custom
+       end
+   end,
+})
+
+local CapsuleToggle = MainTab:CreateToggle({
+   Name = "Collect Research Capsules",
+   CurrentValue = false,
+   Flag = "CollectCapsules",
+   Callback = function(Value)
+       collectingCapsules = Value
+       
+       if Value then
+           task.spawn(function()
+               collectItemsOfType("ResearchCapsule", function() return collectingCapsules end)
+           end)
+       else
+           if cameraConnection then
+               cameraConnection:Disconnect()
+               cameraConnection = nil
+           end
+           camera.CameraType = Enum.CameraType.Custom
+       end
+   end,
+})
+
+local OrnamentToggle = MainTab:CreateToggle({
+   Name = "Collect Ornaments",
+   CurrentValue = false,
+   Flag = "CollectOrnaments",
+   Callback = function(Value)
+       collectingOrnaments = Value
+       
+       if Value then
+           task.spawn(function()
+               collectItemsOfType("HolidayCollectibleItem", function() return collectingOrnaments end)
+           end)
+       else
+           if cameraConnection then
+               cameraConnection:Disconnect()
+               cameraConnection = nil
+           end
+           camera.CameraType = Enum.CameraType.Custom
+       end
+   end,
+})
+
+local ItemsToggle = MainTab:CreateToggle({
+   Name = "Collect Items",
+   CurrentValue = false,
+   Flag = "CollectItems",
+   Callback = function(Value)
+       collectingItems = Value
+       
+       if Value then
+           task.spawn(function()
+               collectItemsOfType("Other", function() return collectingItems end)
+           end)
+       else
+           if cameraConnection then
+               cameraConnection:Disconnect()
+               cameraConnection = nil
+           end
+           camera.CameraType = Enum.CameraType.Custom
+       end
+   end,
+})
+
+-- ESP Tab
+local GeneratorESPToggle = ESPTab:CreateToggle({
+   Name = "ESP Generators",
+   CurrentValue = false,
+   Flag = "ESPGenerators",
+   Callback = function(Value)
+       generatorESPEnabled = Value
+       
+       if Value then
+           updateGeneratorESP()
+           monitorGeneratorLights()
+       else
+           clearHighlights(generatorHighlights)
+           -- Disconnect light monitoring
+           for _, connection in pairs(generatorLightConnections) do
+               if connection then
+                   connection:Disconnect()
+               end
+           end
+           table.clear(generatorLightConnections)
+       end
+   end,
+})
+
+local MonsterESPToggle = ESPTab:CreateToggle({
+   Name = "ESP Monsters",
+   CurrentValue = false,
+   Flag = "ESPMonsters",
+   Callback = function(Value)
+       monsterESPEnabled = Value
+       
+       if Value then
+           updateMonsterESP()
+       else
+           clearHighlights(monsterHighlights)
+       end
+   end,
+})
+
+local PlayerESPToggle = ESPTab:CreateToggle({
+   Name = "ESP Players",
+   CurrentValue = false,
+   Flag = "ESPPlayers",
+   Callback = function(Value)
+       playerESPEnabled = Value
+       
+       if Value then
+           updatePlayerESP()
+       else
+           clearHighlights(playerHighlights)
+       end
+   end,
+})
+
+local ElevatorESPToggle = ESPTab:CreateToggle({
+   Name = "ESP Elevator",
+   CurrentValue = false,
+   Flag = "ESPElevators",
+   Callback = function(Value)
+       elevatorESPEnabled = Value
+       
+       if Value then
+           updateElevatorESP()
+       else
+           clearHighlights(elevatorHighlights)
+       end
+   end,
+})
+
+-- Misc Tab
+local WalkspeedToggle = MiscTab:CreateToggle({
+   Name = "Enable Walkspeed",
+   CurrentValue = false,
+   Flag = "EnableWalkspeed",
+   Callback = function(Value)
+       walkspeedEnabled = Value
+       
+       if Value then
+           if walkspeedConnection then
+               walkspeedConnection:Disconnect()
+           end
+           
+           walkspeedConnection = RunService.Heartbeat:Connect(function()
+               if walkspeedEnabled then
+                   local character = player.Character
+                   if character then
+                       local humanoid = character:FindFirstChildOfClass("Humanoid")
+                       if humanoid then
+                           humanoid.WalkSpeed = 33
+                       end
+                   end
+               end
+           end)
+       else
+           if walkspeedConnection then
+               walkspeedConnection:Disconnect()
+               walkspeedConnection = nil
+           end
+           
+           local character = player.Character
+           if character then
+               local humanoid = character:FindFirstChildOfClass("Humanoid")
+               if humanoid then
+                   humanoid.WalkSpeed = 16
+               end
+           end
+       end
+   end,
+})
+
+local NoclipToggle = MiscTab:CreateToggle({
+   Name = "Noclip",
+   CurrentValue = false,
+   Flag = "Noclip",
+   Callback = function(Value)
+       noclipEnabled = Value
+       
+       if Value then
+           -- Initial update for existing parts
+           updateNoclip()
+           
+           -- Monitor for new descendants added (much more efficient than checking every frame)
+           if noclipConnection then
+               noclipConnection:Disconnect()
+           end
+           
+           noclipConnection = workspace.DescendantAdded:Connect(function(descendant)
+               if not noclipEnabled then
+                   return
+               end
+               
+               -- Only process if it's a BasePart
+               if not descendant:IsA("BasePart") then
+                   return
+               end
+               
+               -- Check if this part is in a Walls or FreeArea folder
+               local currentRoom = workspace:FindFirstChild("CurrentRoom")
+               if not currentRoom then
+                   return
+               end
+               
+               local ancestor = descendant.Parent
+               while ancestor and ancestor ~= workspace do
+                   if ancestor.Name == "Walls" or ancestor.Name == "FreeArea" then
+                       -- Check if it's under CurrentRoom
+                       local isUnderCurrentRoom = false
+                       local checkAncestor = ancestor.Parent
+                       while checkAncestor and checkAncestor ~= workspace do
+                           if checkAncestor == currentRoom then
+                               isUnderCurrentRoom = true
+                               break
+                           end
+                           checkAncestor = checkAncestor.Parent
+                       end
+                       
+                       if isUnderCurrentRoom then
+                           processWallPart(descendant)
+                       end
+                       break
+                   end
+                   ancestor = ancestor.Parent
+               end
+           end)
+       else
+           if noclipConnection then
+               noclipConnection:Disconnect()
+               noclipConnection = nil
+           end
+           
+           -- Restore original collision states
+           restoreCollisions()
+       end
+   end,
+})
+
+-- Start room monitoring system
+startRoomMonitoring()
+
+-- Handle character respawn
+player.CharacterAdded:Connect(function(character)
+    character:WaitForChild("Humanoid")
+    -- Character respawned, ready for new actions
+end)
