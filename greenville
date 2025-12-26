@@ -223,49 +223,58 @@ local function faceRight()
     humanoidRootPart.CFrame = CFrame.new(humanoidRootPart.Position) * CFrame.Angles(0, math.rad(-90), 0)
 end
 
--- New movement system - just platform and walking at 100 studs/second
+-- Movement system - platform parented to character (not workspace) + noclip + walking at 100 studs/second
 local activePlatform = nil
 local function smoothTeleport(targetPosition)
     print("🚶 Walking to: " .. tostring(targetPosition))
     
-    -- Create platform under player if it doesn't exist
+    -- Create platform under player and parent it to the CHARACTER, not workspace
     if not activePlatform then
         activePlatform = Instance.new("Part")
         activePlatform.Size = Vector3.new(6, 1, 6)
-        activePlatform.Anchored = true
+        activePlatform.Anchored = false
         activePlatform.CanCollide = true
         activePlatform.Transparency = 1
-        activePlatform.Parent = workspace
+        activePlatform.Name = "WalkPlatform"
+        
+        -- Parent to character instead of workspace
+        activePlatform.Parent = character
+        
+        -- Create weld to keep it under player
+        local weld = Instance.new("WeldConstraint")
+        weld.Part0 = humanoidRootPart
+        weld.Part1 = activePlatform
+        weld.Parent = activePlatform
+        
+        -- Position it below
+        activePlatform.CFrame = humanoidRootPart.CFrame * CFrame.new(0, -3, 0)
     end
     
-    -- Position platform under player
-    activePlatform.Position = humanoidRootPart.Position - Vector3.new(0, 3, 0)
-    
-    -- Just set WalkSpeed to 100
-    character.Humanoid.WalkSpeed = 100
-    
-    -- Calculate direction and make humanoid walk
-    local direction = (targetPosition - humanoidRootPart.Position).Unit
-    
-    -- Keep moving platform under player while walking
-    local arrived = false
-    spawn(function()
-        while not arrived do
-            if activePlatform and humanoidRootPart then
-                activePlatform.Position = humanoidRootPart.Position - Vector3.new(0, 3, 0)
-            end
-            task.wait(0.1)
+    -- Enable noclip - make character parts non-collidable
+    for _, part in pairs(character:GetDescendants()) do
+        if part:IsA("BasePart") and part.Name ~= "WalkPlatform" then
+            part.CanCollide = false
         end
-    end)
+    end
+    
+    -- Set WalkSpeed to 100
+    character.Humanoid.WalkSpeed = 100
     
     -- Make humanoid move to target
     character.Humanoid:MoveTo(targetPosition)
-    character.Humanoid.MoveToFinished:Wait()
     
-    arrived = true
+    -- Wait for arrival
+    character.Humanoid.MoveToFinished:Wait()
     
     -- Reset walk speed
     character.Humanoid.WalkSpeed = 16
+    
+    -- Re-enable collisions (except platform)
+    for _, part in pairs(character:GetDescendants()) do
+        if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" and part.Name ~= "WalkPlatform" then
+            part.CanCollide = true
+        end
+    end
     
     print("✅ Arrived at destination")
 end
