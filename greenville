@@ -223,6 +223,62 @@ local function faceRight()
     humanoidRootPart.CFrame = CFrame.new(humanoidRootPart.Position) * CFrame.Angles(0, math.rad(-90), 0)
 end
 
+-- Movement system - platform parented to character + noclip + walking at 100 studs/second
+local activePlatform = nil
+local function smoothTeleport(targetPosition)
+    print("🚶 Walking to: " .. tostring(targetPosition))
+    
+    -- Create platform under player and parent it to the CHARACTER, not workspace
+    if not activePlatform then
+        activePlatform = Instance.new("Part")
+        activePlatform.Size = Vector3.new(6, 1, 6)
+        activePlatform.Anchored = false
+        activePlatform.CanCollide = true
+        activePlatform.Transparency = 1
+        activePlatform.Name = "WalkPlatform"
+        
+        -- Parent to character instead of workspace
+        activePlatform.Parent = character
+        
+        -- Create weld to keep it under player
+        local weld = Instance.new("WeldConstraint")
+        weld.Part0 = humanoidRootPart
+        weld.Part1 = activePlatform
+        weld.Parent = activePlatform
+        
+        -- Position it below
+        activePlatform.CFrame = humanoidRootPart.CFrame * CFrame.new(0, -3, 0)
+    end
+    
+    -- Enable noclip - make character parts non-collidable
+    for _, part in pairs(character:GetDescendants()) do
+        if part:IsA("BasePart") and part.Name ~= "WalkPlatform" then
+            part.CanCollide = false
+        end
+    end
+    
+    -- Set WalkSpeed to 100
+    character.Humanoid.WalkSpeed = 100
+    
+    -- Make humanoid move to target
+    character.Humanoid:MoveTo(targetPosition)
+    
+    -- Wait for arrival
+    character.Humanoid.MoveToFinished:Wait()
+    
+    -- Reset walk speed
+    character.Humanoid.WalkSpeed = 16
+    
+    -- Re-enable collisions (except platform)
+    for _, part in pairs(character:GetDescendants()) do
+        if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" and part.Name ~= "WalkPlatform" then
+            part.CanCollide = true
+        end
+    end
+    
+    print("✅ Arrived at destination")
+end
+
 local function ensureCameraUnlocked()
     Camera.CameraType = Enum.CameraType.Custom
     Camera.CameraSubject = character.Humanoid
@@ -365,7 +421,7 @@ local function deliverToBoxPad(boxPad, boxPadIndex)
         return
     end
     
-    humanoidRootPart.CFrame = rearPlate.CFrame + Vector3.new(0, 5, 0)
+    smoothTeleport(rearPlate.Position + Vector3.new(0, 5, 0))
     faceRight()
     print("   At car rear, waiting 1 second...")
     wait(1)
@@ -383,7 +439,7 @@ local function deliverToBoxPad(boxPad, boxPadIndex)
     
     -- Step 6: Teleport back to BoxPad ONCE (ALWAYS RUN THIS)
     print("Step 6: Teleport back to BoxPad ONCE")
-    humanoidRootPart.CFrame = boxPad.CFrame + Vector3.new(0, 5, 0)
+    smoothTeleport(boxPad.Position + Vector3.new(0, 5, 0))
     faceRight()
     wait(0.5)
     
@@ -533,7 +589,7 @@ while true do
     
     -- STEP 1: Teleport to start
     print("STEP 1: Teleport to start")
-    humanoidRootPart.CFrame = CFrame.new(1306, -78, -9967)
+    smoothTeleport(Vector3.new(1306, -78, -9967))
     faceRight()
     humanoidRootPart.Anchored = true
     character.Humanoid.WalkSpeed = 0
@@ -642,7 +698,7 @@ while true do
         
         -- STEP 6: Teleport to first BoxPad
         print("STEP 6: Teleport to first BoxPad")
-        humanoidRootPart.CFrame = firstBoxPad.CFrame + Vector3.new(0, 10, 0)
+        smoothTeleport(firstBoxPad.Position + Vector3.new(0, 10, 0))
         faceRight()
         humanoidRootPart.Anchored = true
         character.Humanoid.WalkSpeed = 0
@@ -830,7 +886,7 @@ while true do
                             cashBefore = getCurrentCash()
                             print("💰 Recording cash before BoxPad #" .. i .. ": $" .. cashBefore)
                             
-                            humanoidRootPart.CFrame = boxPad.CFrame + Vector3.new(0, 10, 0)
+                            smoothTeleport(boxPad.Position + Vector3.new(0, 10, 0))
                             faceRight()
                             humanoidRootPart.Anchored = true
                             character.Humanoid.WalkSpeed = 0
