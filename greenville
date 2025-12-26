@@ -22,11 +22,30 @@ local character = player.Character or player.CharacterAdded:Wait()
 local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
 local Camera = workspace.CurrentCamera
 
-print("=== PROPER DELIVERY SCRIPT ===")
+-- Variable to track if we should restart the cycle
+local shouldRestartCycle = false
+
+-- Listen for character death to restart cycle
+local function onCharacterAdded(newCharacter)
+    character = newCharacter
+    humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+    shouldRestartCycle = true
+    
+    -- Listen for death on new character
+    character:WaitForChild("Humanoid").Died:Connect(function()
+        shouldRestartCycle = true
+    end)
+end
+
+player.CharacterAdded:Connect(onCharacterAdded)
+
+-- Listen for death on current character
+character:WaitForChild("Humanoid").Died:Connect(function()
+    shouldRestartCycle = true
+end)
+
 if WEBHOOK_ENABLED then
-    print("✅ Webhook enabled")
 else
-    print("⚠️ Webhook disabled (no URL provided)")
 end
 
 -- Track stats for webhook
@@ -40,7 +59,6 @@ local function deleteNotifications()
         local notification = player.PlayerGui.UI.Uni:FindFirstChild("Notification")
         if notification then
             notification:Destroy()
-            print("🗑️ Deleted Notification UI")
         end
     end)
 end
@@ -51,7 +69,6 @@ deleteNotifications()
 -- Create black screen overlay
 local function createBlackScreen()
     if not DARK_SCREEN then
-        print("⚪ Dark screen disabled")
         return
     end
     
@@ -70,7 +87,6 @@ local function createBlackScreen()
         blackFrame.Parent = screenGui
         
         screenGui.Parent = player.PlayerGui
-        print("🖤 Black screen overlay created")
     end)
 end
 
@@ -93,7 +109,6 @@ end
 
 -- Initialize starting money
 scriptStartMoney = getCurrentCash()
-print("💰 Starting money: $" .. scriptStartMoney)
 
 -- Function to send webhook
 local function sendWebhook()
@@ -136,29 +151,22 @@ local function sendWebhook()
     end)
     
     if success then
-        print("✅ Webhook sent - Current: $" .. currentMoney .. " | Farmed: $" .. totalFarmed)
     else
-        print("❌ Webhook failed: " .. tostring(result))
     end
 end
 
 -- Function to reset character if cash didn't increase
 local function checkCashAndReset(beforeCash)
     local currentCash = getCurrentCash()
-    print("💰 Cash check: Before = $" .. beforeCash .. " | After = $" .. currentCash)
     
     if currentCash <= beforeCash then
-        print("❌ CASH DID NOT INCREASE - RESETTING CHARACTER")
         -- Normal Roblox reset
         player.Character.Humanoid.Health = 0
-        print("⏳ Waiting 10 seconds for respawn...")
         wait(10)
         character = player.Character or player.CharacterAdded:Wait()
         humanoidRootPart = character:WaitForChild("HumanoidRootPart")
-        print("✅ Character reset complete - restarting cycle")
         return true -- Indicates reset happened
     else
-        print("✅ Cash increased by $" .. (currentCash - beforeCash))
         return false -- No reset needed
     end
 end
@@ -199,7 +207,6 @@ local function deleteClaimMailboxes()
             end)
         end
     end)
-    print("🗑️ Deleted " .. deleted .. " mailboxes")
     return deleted
 end
 
@@ -223,72 +230,105 @@ local function faceRight()
     humanoidRootPart.CFrame = CFrame.new(humanoidRootPart.Position) * CFrame.Angles(0, math.rad(-90), 0)
 end
 
--- Movement system - platform parented to character + noclip + walking at 100 studs/second
+-- Movement system - smooth hovering at 100 studs/second with platform and walking animation
 local activePlatform = nil
+
+local function disablePlatform()
+    if activePlatform then
+        activePlatform:Destroy()
+        activePlatform = nil
+    end
+end
+
 local function smoothTeleport(targetPosition)
-    print("🚶 Walking to: " .. tostring(targetPosition))
     
-    -- Create platform under player and parent it to the CHARACTER, not workspace
+    -- Create platform under player if it doesn't exist
     if not activePlatform then
         activePlatform = Instance.new("Part")
         activePlatform.Size = Vector3.new(6, 1, 6)
-        activePlatform.Anchored = false
+        activePlatform.Anchored = true
         activePlatform.CanCollide = true
         activePlatform.Transparency = 1
         activePlatform.Name = "WalkPlatform"
-        
-        -- Parent to character instead of workspace
         activePlatform.Parent = character
-        
-        -- Create weld to keep it under player
-        local weld = Instance.new("WeldConstraint")
-        weld.Part0 = humanoidRootPart
-        weld.Part1 = activePlatform
-        weld.Parent = activePlatform
-        
-        -- Position it below
-        activePlatform.CFrame = humanoidRootPart.CFrame * CFrame.new(0, -3, 0)
     end
     
-    -- Enable noclip - make character parts non-collidable
+    -- Enable noclip for character parts
     for _, part in pairs(character:GetDescendants()) do
         if part:IsA("BasePart") and part.Name ~= "WalkPlatform" then
             part.CanCollide = false
         end
     end
     
-    -- Set WalkSpeed to 100
-    character.Humanoid.WalkSpeed = 100
+    -- Make character face the direction they're moving
+    local direction = (targetPosition - humanoidRootPart.Position).Unit
+    local targetCFrame = CFrame.new(humanoidRootPart.Position, humanoidRootPart.Position + direction)
     
-    -- Make humanoid move to target
-    character.Humanoid:MoveTo(targetPosition)
+    -- Calculate distance and time
+    local startPos = humanoidRootPart.Position
+    local distance = (targetPosition - startPos).Magnitude
+    local speed = 500 -- studs per second
+    local travelTime = distance / speed
     
-    -- Wait for arrival
-    character.Humanoid.MoveToFinished:Wait()
-    
-    -- Reset walk speed
+    -- Set walking animation by setting WalkSpeed (makes it look like walking)
     character.Humanoid.WalkSpeed = 16
     
-    -- Re-enable collisions (except platform)
+    -- Hover smoothly to destination while maintaining walking appearance
+    local startTime = tick()
+    while tick() - startTime < travelTime do
+        local elapsed = tick() - startTime
+        local progress = elapsed / travelTime
+        
+        -- Lerp to target position
+        local currentPos = startPos:Lerp(targetPosition, progress)
+        
+        -- Update direction to face movement
+        local moveDirection = (targetPosition - currentPos).Unit
+        if moveDirection.Magnitude > 0 then
+            targetCFrame = CFrame.new(currentPos, currentPos + moveDirection)
+        else
+            targetCFrame = CFrame.new(currentPos)
+        end
+        
+        -- Move player smoothly with proper orientation
+        humanoidRootPart.CFrame = targetCFrame
+        
+        -- Keep platform under player
+        activePlatform.CFrame = CFrame.new(currentPos - Vector3.new(0, 3, 0))
+        
+        -- Make humanoid think it's walking (triggers walk animation)
+        character.Humanoid:Move(moveDirection, false)
+        
+        task.wait()
+    end
+    
+    -- Ensure we reach exact destination
+    humanoidRootPart.CFrame = CFrame.new(targetPosition, targetPosition + direction)
+    activePlatform.CFrame = CFrame.new(targetPosition - Vector3.new(0, 3, 0))
+    
+    -- Stop movement
+    character.Humanoid:Move(Vector3.new(0, 0, 0), false)
+    
+    -- Re-enable collisions for character parts
     for _, part in pairs(character:GetDescendants()) do
         if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" and part.Name ~= "WalkPlatform" then
             part.CanCollide = true
         end
     end
     
-    print("✅ Arrived at destination")
+    -- Disable platform after arriving so player can land on ground
+    disablePlatform()
+    
 end
 
 local function ensureCameraUnlocked()
     Camera.CameraType = Enum.CameraType.Custom
     Camera.CameraSubject = character.Humanoid
-    print("✅ Camera unlocked")
 end
 
 local function lockCamera(position, lookAt)
     Camera.CameraType = Enum.CameraType.Scriptable
     Camera.CFrame = CFrame.new(position, lookAt)
-    print("🔒 Camera locked")
 end
 
 local function getAllBoxPads()
@@ -298,7 +338,6 @@ local function getAllBoxPads()
             table.insert(boxPads, obj)
         end
     end
-    print("📦 Found " .. #boxPads .. " BoxPads")
     return boxPads
 end
 
@@ -309,12 +348,10 @@ local function checkIfBoxPadsHavePrompts(boxPads)
             boxPadsWithPrompts = boxPadsWithPrompts + 1
         end
     end
-    print("🔍 " .. boxPadsWithPrompts .. " BoxPads have ProximityPrompts")
     return boxPadsWithPrompts > 0
 end
 
 local function triggerProximityPromptProperly(targetPosition, maxDistance)
-    print("🎯 Finding proximity prompt near target...")
     
     -- Find the closest prompt EXACTLY like the working initial prompt does
     local closestPrompt = nil
@@ -326,125 +363,110 @@ local function triggerProximityPromptProperly(targetPosition, maxDistance)
             if distance < maxDistance and distance < closestDistance then
                 closestPrompt = obj
                 closestDistance = distance
-                print("   Found: " .. obj.Parent.Name .. " at " .. math.floor(distance) .. " studs")
             end
         end
     end
     
     if closestPrompt then
-        print("✅ TRIGGERING PROMPT: " .. closestPrompt.Parent.Name)
         
         -- Use the EXACT SAME METHOD that works for the initial prompt
         fireproximityprompt(closestPrompt)
         
-        print("✅ Proximity prompt triggered")
         return true
     else
-        print("❌ No proximity prompt found within " .. maxDistance .. " studs")
         return false
     end
 end
 
 local function deliverToBoxPad(boxPad, boxPadIndex)
-    print("========================================")
-    print("📍 BOXPAD #" .. boxPadIndex)
-    print("========================================")
     
     -- CHECK: Does this BoxPad have a ProximityPrompt?
     if not boxPad:FindFirstChildWhichIsA("ProximityPrompt") then
-        print("⚠️ BoxPad #" .. boxPadIndex .. " has no ProximityPrompt - SKIPPING")
         return
     end
     
-    print("✅ BoxPad #" .. boxPadIndex .. " has ProximityPrompt - continuing")
     
     -- NO TELEPORTING - WE'RE ALREADY AT THE BOXPAD
     
     -- Step 1: Lock camera down on BoxPad
-    print("Step 1: Lock camera on BoxPad")
     lockCamera(boxPad.Position + Vector3.new(0, 8, 0), boxPad.Position)
     wait(0.5)
     
     -- Step 2: Press E to trigger BoxPad prompt
-    print("Step 2: Press E to trigger BoxPad prompt")
     pcall(function()
         VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
         task.wait(0.1)
         VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
     end)
-    print("✅ Pressed E")
     
     wait(0.5)
     
     -- Step 3: Unlock camera (ALWAYS RUN THIS)
-    print("Step 3: Unlock camera")
     ensureCameraUnlocked()
     faceRight()
     wait(0.3)
     
     -- Step 4: Teleport to car's back ONCE (ALWAYS RUN THIS)
-    print("Step 4: Teleport to car ONCE")
     local playerCarName = player.Name .. "-Car"
+    
+    -- Wait for car to exist
     local playerCar = workspace.SessionVehicles:FindFirstChild(playerCarName)
+    local attempts = 0
+    while not playerCar and attempts < 10 do
+        wait(0.5)
+        playerCar = workspace.SessionVehicles:FindFirstChild(playerCarName)
+        attempts = attempts + 1
+    end
     
     if not playerCar then
-        print("❌ Car not found")
         ensureCameraUnlocked()
         return
     end
     
     local carBody = playerCar:FindFirstChild("Body")
     if not carBody then
-        print("❌ Car body not found")
         ensureCameraUnlocked()
         return
     end
     
     local licensePlates = carBody:FindFirstChild("Wisconsin License Plates")
     if not licensePlates then
-        print("❌ License plates not found")
         ensureCameraUnlocked()
         return
     end
     
     local plates = licensePlates:FindFirstChild("Plates")
     if not plates then
-        print("❌ Plates not found")
         ensureCameraUnlocked()
         return
     end
     
     local rearPlate = plates:FindFirstChild("Rear")
     if not rearPlate then
-        print("❌ Rear plate not found")
         ensureCameraUnlocked()
         return
     end
     
+    -- GO TO CAR
     smoothTeleport(rearPlate.Position + Vector3.new(0, 5, 0))
     faceRight()
-    print("   At car rear, waiting 1 second...")
     wait(1)
     
     -- Step 5: Press E to trigger car prompt
-    print("Step 5: Press E to trigger car prompt")
     pcall(function()
         VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
         task.wait(0.1)
         VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
     end)
-    print("✅ Pressed E")
     
     wait(0.5)
     
     -- Step 6: Teleport back to BoxPad ONCE (ALWAYS RUN THIS)
-    print("Step 6: Teleport back to BoxPad ONCE")
     smoothTeleport(boxPad.Position + Vector3.new(0, 5, 0))
     faceRight()
     wait(0.5)
     
     -- Step 7: Select the wanted box
-    print("Step 7: Select matching box")
     local boxDeliveryUI = player.PlayerGui.UI.Uni.Interfaces.BoxDelivery
     
     local waitTime = 0
@@ -454,7 +476,6 @@ local function deliverToBoxPad(boxPad, boxPadIndex)
     end
     
     if not boxDeliveryUI.Visible then
-        print("❌ BoxDelivery UI not visible")
         ensureCameraUnlocked()
         return
     end
@@ -478,7 +499,6 @@ local function deliverToBoxPad(boxPad, boxPadIndex)
     end
     
     if not neededImageId then
-        print("❌ Could not find needed box image")
         GuiService.GuiNavigationEnabled = false
         ensureCameraUnlocked()
         return
@@ -514,13 +534,11 @@ local function deliverToBoxPad(boxPad, boxPadIndex)
     end
     
     if not matchingBoxButton then
-        print("❌ No matching box found")
         GuiService.GuiNavigationEnabled = false
         ensureCameraUnlocked()
         return
     end
     
-    print("✅ Found matching box")
     
     local clickableButton = matchingBoxButton
     if not (clickableButton:IsA("ImageButton") or clickableButton:IsA("TextButton")) then
@@ -534,7 +552,6 @@ local function deliverToBoxPad(boxPad, boxPadIndex)
         wait(0.3)
         
         -- Step 8: Press Enter
-        print("Step 8: Press Enter")
         pressEnterKey()
         wait(0.3)
         
@@ -560,20 +577,27 @@ local function deliverToBoxPad(boxPad, boxPadIndex)
     wait(0.2)
     
     -- Step 9: Lock camera down on BoxPad
-    print("Step 9: Lock camera on BoxPad")
     lockCamera(boxPad.Position + Vector3.new(0, 1.5, 0), boxPad.Position)
     wait(1)
     
     -- Step 10: Unlock camera
-    print("Step 10: Unlock camera")
     ensureCameraUnlocked()
     faceRight()
     
-    print("✅ BoxPad #" .. boxPadIndex .. " COMPLETE")
 end
 
 -- MAIN LOOP
 while true do
+    -- Check if we should restart due to death
+    if shouldRestartCycle then
+        shouldRestartCycle = false
+        wait(10) -- Wait for respawn
+        character = player.Character or player.CharacterAdded:Wait()
+        humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+        activePlatform = nil -- Reset platform
+        continue -- Restart the cycle
+    end
+    
     -- Check if 5 minutes passed and send webhook
     local currentTime = tick()
     if WEBHOOK_ENABLED and (currentTime - lastWebhookTime) >= WEBHOOK_INTERVAL then
@@ -581,14 +605,10 @@ while true do
         lastWebhookTime = currentTime
     end
     
-    print("========================================")
-    print("🔄 NEW CYCLE")
-    print("========================================")
     
     ensureCameraUnlocked()
     
     -- STEP 1: Teleport to start
-    print("STEP 1: Teleport to start")
     smoothTeleport(Vector3.new(1306, -78, -9967))
     faceRight()
     humanoidRootPart.Anchored = true
@@ -599,18 +619,15 @@ while true do
     wait(0.5)
     
     -- STEP 2: Trigger initial prompt by pressing E
-    print("STEP 2: Press E to trigger initial prompt")
     pcall(function()
         VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
         task.wait(0.1)
         VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
     end)
-    print("✅ Pressed E for initial prompt")
     
     wait(0.5)
     
     -- STEP 3: Unfreeze (ALWAYS RUN THIS)
-    print("STEP 3: Unfreeze")
     humanoidRootPart.Anchored = false
     character.Humanoid.WalkSpeed = 16
     character.Humanoid.JumpPower = 50
@@ -618,7 +635,6 @@ while true do
     wait(0.5)
     
     -- STEP 4: Click all boxes 10 times each
-    print("STEP 4: Click all boxes")
     pcall(function()
         local playerGui = player:WaitForChild("PlayerGui")
         local buttonsFolder = playerGui:WaitForChild("UI").Uni.Interfaces.BoxDelivery.Buttons
@@ -638,7 +654,6 @@ while true do
                 end
                 
                 if clickableButton then
-                    print("  CLICKING: " .. name)
                     GuiService.SelectedObject = clickableButton
                     
                     -- CONTINUOUSLY SPAM CLICK FOR 0.3 SECONDS
@@ -682,22 +697,18 @@ while true do
         GuiService.SelectedObject = nil
         
         -- STOP THE NAVIGATION UI
-        print("STOPPING NAVIGATION UI")
         pcall(function() GuiService.GuiNavigationEnabled = false end)
     end)
     
-    print("✅ All boxes clicked")
     wait(0.5)
     
     -- STEP 5: Get BoxPads
-    print("STEP 5: Find BoxPads")
     local boxPads = getAllBoxPads()
     
     if #boxPads > 0 then
         local firstBoxPad = boxPads[1]
         
         -- STEP 6: Teleport to first BoxPad
-        print("STEP 6: Teleport to first BoxPad")
         smoothTeleport(firstBoxPad.Position + Vector3.new(0, 10, 0))
         faceRight()
         humanoidRootPart.Anchored = true
@@ -706,11 +717,9 @@ while true do
         wait(0.3)
         
         -- STEP 7: Wait 3 seconds FROZEN
-        print("STEP 7: Wait 3 seconds FROZEN")
         wait(3)
         
         -- STEP 8: Unfreeze
-        print("STEP 8: Unfreeze")
         humanoidRootPart.Anchored = false
         character.Humanoid.WalkSpeed = 16
         character.Humanoid.JumpPower = 50
@@ -718,12 +727,10 @@ while true do
         wait(0.3)
         
         -- STEP 9: Delete mailboxes
-        print("STEP 9: Delete mailboxes")
         deleteClaimMailboxes()
         wait(0.3)
         
         -- STEP 10: START NAVIGATION UI AGAIN and spawn car
-        print("STEP 10: START NAVIGATION UI and spawn car")
         GuiService.GuiNavigationEnabled = true
         wait(0.2)
         local garageButton = player.PlayerGui.UI.Uni.Hud.Navbar.Garage
@@ -767,13 +774,10 @@ while true do
                 deleteClaimMailboxes()
                 
                 local playerCarName = player.Name .. "-Car"
-                print("🔍 Checking for car: " .. playerCarName)
                 local playerCar = workspace.SessionVehicles:FindFirstChild(playerCarName)
                 
                 if playerCar then
-                    print("✅ Car already found immediately!")
                 else
-                    print("⏳ Car not found, waiting...")
                 end
                 
                 local waitAttempts = 0
@@ -781,19 +785,15 @@ while true do
                     wait(0.5)
                     playerCar = workspace.SessionVehicles:FindFirstChild(playerCarName)
                     waitAttempts = waitAttempts + 1
-                    print("   Attempt " .. waitAttempts .. "/8: " .. (playerCar and "FOUND" or "NOT FOUND"))
                 end
                 
                 -- If car still not spawned, rotate and try again
                 if not playerCar then
-                    print("❌❌❌ CAR NOT SPAWNED AFTER 8 ATTEMPTS - ROTATING AND RETRYING ❌❌❌")
-                    print("⚠️ Car not spawned, pressing Tab twice...")
                     pressTabKey()
                     wait(0.2)
                     pressTabKey()
                     wait(0.3)
                     
-                    print("Rotating 180° and trying again...")
                     humanoidRootPart.CFrame = humanoidRootPart.CFrame * CFrame.Angles(0, math.rad(180), 0)
                     wait(0.5)
                     
@@ -844,7 +844,6 @@ while true do
                             
                             -- If car spawned after retry, press Tab twice
                             if playerCar then
-                                print("✅ Car spawned after retry, pressing Tab twice")
                                 pressTabKey()
                                 wait(0.2)
                                 pressTabKey()
@@ -855,49 +854,46 @@ while true do
                 end
                 
                 if playerCar then
-                    print("✅ Car spawned")
                     wait(0.5)
                     
                     -- STEP 11: Press Tab TWICE after car spawns
-                    print("STEP 11: Press Tab twice")
                     pressTabKey()
                     wait(0.2)
                     pressTabKey()
                     wait(0.3)
                     
                     -- STEP 12: Deliver to all BoxPads
-                    print("STEP 12: Deliver to all BoxPads")
                     
                     -- CHECK: Do any BoxPads have ProximityPrompts?
                     if not checkIfBoxPadsHavePrompts(boxPads) then
-                        print("⚠️ No BoxPads have ProximityPrompts - RESTARTING CYCLE")
                         break
                     end
                     
                     for i, boxPad in ipairs(boxPads) do
+                        -- Check if player died
+                        if shouldRestartCycle then
+                            break
+                        end
+                        
                         -- Variable to track cash before this BoxPad
                         local cashBefore = 0
                         
                         -- If not the first BoxPad, teleport 10 studs up and freeze for 3 seconds
                         if i > 1 then
-                            print("Teleporting to BoxPad #" .. i)
                             
                             -- Record cash before teleporting
                             cashBefore = getCurrentCash()
-                            print("💰 Recording cash before BoxPad #" .. i .. ": $" .. cashBefore)
                             
                             smoothTeleport(boxPad.Position + Vector3.new(0, 10, 0))
                             faceRight()
                             humanoidRootPart.Anchored = true
                             character.Humanoid.WalkSpeed = 0
                             character.Humanoid.JumpPower = 0
-                            print("Frozen 10 studs above BoxPad #" .. i .. " - waiting 3 seconds")
                             wait(3)
                             humanoidRootPart.Anchored = false
                             character.Humanoid.WalkSpeed = 16
                             character.Humanoid.JumpPower = 50
                             faceRight()
-                            print("Unfrozen")
                             wait(0.3)
                             
                             -- Delete mailboxes
@@ -905,7 +901,6 @@ while true do
                             wait(0.3)
                             
                             -- Spawn car for this BoxPad
-                            print("🚗 Spawning car for BoxPad #" .. i)
                             GuiService.GuiNavigationEnabled = true
                             wait(0.2)
                             
@@ -951,13 +946,10 @@ while true do
                                     
                                     -- Wait for car to spawn
                                     local playerCarName = player.Name .. "-Car"
-                                    print("🔍 Checking for car at BoxPad #" .. i .. ": " .. playerCarName)
                                     local playerCarCheck = workspace.SessionVehicles:FindFirstChild(playerCarName)
                                     
                                     if playerCarCheck then
-                                        print("✅ Car already found immediately!")
                                     else
-                                        print("⏳ Car not found, waiting...")
                                     end
                                     
                                     local waitAttempts = 0
@@ -965,19 +957,15 @@ while true do
                                         wait(0.5)
                                         playerCarCheck = workspace.SessionVehicles:FindFirstChild(playerCarName)
                                         waitAttempts = waitAttempts + 1
-                                        print("   Attempt " .. waitAttempts .. "/8: " .. (playerCarCheck and "FOUND" or "NOT FOUND"))
                                     end
                                     
                                     -- If car still not spawned, rotate and try again
                                     if not playerCarCheck then
-                                        print("❌❌❌ CAR NOT SPAWNED FOR BOXPAD #" .. i .. " - ROTATING AND RETRYING ❌❌❌")
-                                        print("⚠️ Car not spawned for BoxPad #" .. i .. ", pressing Tab twice...")
                                         pressTabKey()
                                         wait(0.2)
                                         pressTabKey()
                                         wait(0.3)
                                         
-                                        print("Rotating 180° and trying again...")
                                         humanoidRootPart.CFrame = humanoidRootPart.CFrame * CFrame.Angles(0, math.rad(180), 0)
                                         wait(0.5)
                                         
@@ -1028,7 +1016,6 @@ while true do
                                                 
                                                 -- If car spawned after retry, press Tab twice
                                                 if playerCarCheck then
-                                                    print("✅ Car spawned after retry for BoxPad #" .. i .. ", pressing Tab twice")
                                                     pressTabKey()
                                                     wait(0.2)
                                                     pressTabKey()
@@ -1039,7 +1026,6 @@ while true do
                                     end
                                     
                                     if playerCarCheck then
-                                        print("✅ Car spawned for BoxPad #" .. i)
                                         wait(0.5)
                                         pressTabKey()
                                         wait(0.2)
@@ -1051,7 +1037,6 @@ while true do
                         end
                         
                         -- ENSURE PLAYER IS UNFROZEN before delivery
-                        print("Ensuring player is unfrozen before delivery...")
                         humanoidRootPart.Anchored = false
                         character.Humanoid.WalkSpeed = 16
                         character.Humanoid.JumpPower = 50
@@ -1072,15 +1057,12 @@ while true do
                         end
                     end
                     
-                    print("🎉 ALL DELIVERIES COMPLETE")
                     wait(2)
                 else
-                    print("❌ Car failed to spawn")
                 end
             end
         end
     else
-        print("⚠️ No BoxPads found")
         wait(2)
     end
     
