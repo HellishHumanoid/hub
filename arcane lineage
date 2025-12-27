@@ -24,7 +24,7 @@ local DodgeTab = Window:CreateTab("Auto-Dodge", 4483362458)
 
 local AutoDodgeEnabled = false
 local YellowDodgeDelay = 0
-local RedDodgeDelay = 0.1
+local RedDodgeDelay = 0
 local EarlyOffset = 2
 
 local DodgeToggle = DodgeTab:CreateToggle({
