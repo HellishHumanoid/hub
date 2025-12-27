@@ -229,17 +229,21 @@ local function performAutoAttack()
    
    task.wait(0.3)
    
-   -- Step 1: Select and press AttackButton
-   GuiService.SelectedObject = attackButton
-   task.wait(0.3)
+   -- Step 1: Click AttackButton until AttacksPage appears
+   local attackAttempts = 0
+   while actionBG.Visible and not actionBG.AttacksPage.Visible and attackAttempts < 5 do
+      GuiService.SelectedObject = attackButton
+      task.wait(0.3)
+      
+      VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+      task.wait(0.05)
+      VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+      
+      task.wait(0.5)
+      attackAttempts = attackAttempts + 1
+   end
    
-   VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
-   task.wait(0.05)
-   VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
-   
-   task.wait(0.5)
-   
-   if not actionBG.Visible then
+   if not actionBG.Visible or not actionBG.AttacksPage.Visible then
       GuiService.GuiNavigationEnabled = false
       GuiService.SelectedObject = nil
       UserInputService.MouseIconEnabled = true
@@ -247,7 +251,7 @@ local function performAutoAttack()
       return
    end
    
-   -- Step 2: Select and press Skill
+   -- Step 2: Click Skill until Enemies appear
    local skillButton = actionBG.AttacksPage.Attack.ScrollingFrame:FindFirstChild(SelectedSkill)
    
    if not skillButton then
@@ -258,16 +262,32 @@ local function performAutoAttack()
       return
    end
    
-   GuiService.SelectedObject = skillButton
-   task.wait(0.3)
+   local skillAttempts = 0
+   local enemiesVisible = false
    
-   VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
-   task.wait(0.05)
-   VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+   while actionBG.Visible and not enemiesVisible and skillAttempts < 5 do
+      GuiService.SelectedObject = skillButton
+      task.wait(0.3)
+      
+      VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+      task.wait(0.05)
+      VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+      
+      task.wait(0.5)
+      
+      -- Check if enemies appeared
+      local enemiesScroll = actionBG.AttacksPage.Enemies.ScrollingFrame
+      for _, child in pairs(enemiesScroll:GetChildren()) do
+         if child:IsA("GuiObject") and not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
+            enemiesVisible = true
+            break
+         end
+      end
+      
+      skillAttempts = skillAttempts + 1
+   end
    
-   task.wait(0.5)
-   
-   if not actionBG.Visible then
+   if not actionBG.Visible or not enemiesVisible then
       GuiService.GuiNavigationEnabled = false
       GuiService.SelectedObject = nil
       UserInputService.MouseIconEnabled = true
@@ -275,7 +295,7 @@ local function performAutoAttack()
       return
    end
    
-   -- Step 3: Select and press Enemy (with retry until GUI disappears)
+   -- Step 3: Click Enemy until GUI disappears
    local enemiesScroll = actionBG.AttacksPage.Enemies.ScrollingFrame
    local firstEnemy = nil
    
@@ -294,11 +314,8 @@ local function performAutoAttack()
       return
    end
    
-   -- Keep selecting enemy until GUI disappears
-   local maxAttempts = 5
-   local attempts = 0
-   
-   while actionBG.Visible and attempts < maxAttempts do
+   local enemyAttempts = 0
+   while actionBG.Visible and enemyAttempts < 5 do
       GuiService.SelectedObject = firstEnemy
       task.wait(0.3)
       
@@ -307,8 +324,7 @@ local function performAutoAttack()
       VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
       
       task.wait(0.5)
-      
-      attempts = attempts + 1
+      enemyAttempts = enemyAttempts + 1
    end
    
    GuiService.GuiNavigationEnabled = false
