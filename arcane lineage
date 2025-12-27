@@ -1,0 +1,537 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+   Name = "Rafso Arcane Lineage",
+   LoadingTitle = "Idk",
+   LoadingSubtitle = "by Rafso",
+   ConfigurationSaving = {
+      Enabled = true,
+      FolderName = nil,
+      FileName = "AutoScript"
+   },
+   Discord = {
+      Enabled = false,
+      Invite = "noinvitelink",
+      RememberJoins = true
+   },
+   KeySystem = false,
+})
+
+-- ============================================
+-- AUTO-DODGE SECTION
+-- ============================================
+local DodgeTab = Window:CreateTab("Auto-Dodge", 4483362458)
+
+local AutoDodgeEnabled = false
+local YellowDodgeDelay = 0
+local RedDodgeDelay = 0.1
+local EarlyOffset = 2
+
+local DodgeToggle = DodgeTab:CreateToggle({
+   Name = "Auto-Dodge",
+   CurrentValue = false,
+   Flag = "AutoDodgeToggle",
+   Callback = function(Value)
+      AutoDodgeEnabled = Value
+   end,
+})
+
+local function checkIndicatorPosition()
+   local success, result = pcall(function()
+      local player = game:GetService("Players").LocalPlayer
+      local combat = player.PlayerGui:FindFirstChild("Combat")
+      
+      if not combat then return nil end
+      
+      local block = combat:FindFirstChild("Block")
+      if not block then return nil end
+      
+      if not block.Visible or block.AbsoluteSize.X == 0 then return nil end
+      
+      local inset = block:FindFirstChild("Inset")
+      if not inset then return nil end
+      
+      if not inset.Visible or inset.AbsoluteSize.X == 0 then return nil end
+      
+      local indicator = inset:FindFirstChild("Indicator")
+      local dodge = inset:FindFirstChild("Dodge")
+      local block_area = inset:FindFirstChild("Block")
+      
+      if not indicator then return nil end
+      
+      if not indicator.Visible or indicator.AbsoluteSize.X == 0 then return nil end
+      
+      local indicatorLeft = indicator.AbsolutePosition.X
+      local indicatorRight = indicatorLeft + indicator.AbsoluteSize.X
+      local indicatorCenterX = indicatorLeft + (indicator.AbsoluteSize.X / 2)
+      
+      local hasVisibleDodge = dodge and dodge.Visible and dodge.AbsoluteSize.X > 0
+      
+      if hasVisibleDodge then
+         local dodgeStart = dodge.AbsolutePosition.X
+         local dodgeEnd = dodgeStart + dodge.AbsoluteSize.X
+         local triggerPoint = dodgeStart - EarlyOffset
+         
+         if (indicatorCenterX >= triggerPoint and indicatorCenterX <= dodgeEnd) or
+            (indicatorLeft >= triggerPoint and indicatorLeft <= dodgeEnd) or
+            (indicatorRight >= triggerPoint and indicatorRight <= dodgeEnd) then
+            return "yellow"
+         end
+      elseif block_area and block_area.Visible and block_area.AbsoluteSize.X > 0 then
+         local blockStart = block_area.AbsolutePosition.X
+         local blockEnd = blockStart + block_area.AbsoluteSize.X
+         local triggerPoint = blockStart - EarlyOffset
+         
+         if (indicatorCenterX >= triggerPoint and indicatorCenterX <= blockEnd) or
+            (indicatorLeft >= triggerPoint and indicatorLeft <= blockEnd) or
+            (indicatorRight >= triggerPoint and indicatorRight <= blockEnd) then
+            return "red"
+         end
+      end
+      
+      return nil
+   end)
+   
+   return success and result or nil
+end
+
+local hasPressed = false
+local lastIndicatorPos = nil
+local pressedAt = 0
+local lastAreaType = nil
+
+game:GetService("RunService").RenderStepped:Connect(function()
+   if not AutoDodgeEnabled then return end
+   
+   local success, currentCheck = pcall(function()
+      local player = game:GetService("Players").LocalPlayer
+      local combat = player.PlayerGui:FindFirstChild("Combat")
+      if combat then
+         local block = combat:FindFirstChild("Block")
+         if block then
+            local inset = block:FindFirstChild("Inset")
+            if inset then
+               local indicator = inset:FindFirstChild("Indicator")
+               if indicator and indicator.Visible then
+                  return indicator.AbsolutePosition.X
+               end
+            end
+         end
+      end
+      return nil
+   end)
+   
+   local currentIndicatorPos = success and currentCheck or nil
+   local currentTime = tick()
+   
+   if lastIndicatorPos and currentIndicatorPos and currentIndicatorPos < lastIndicatorPos - 30 then
+      hasPressed = false
+      lastAreaType = nil
+   end
+   
+   if hasPressed and (currentTime - pressedAt) > 0.4 then
+      hasPressed = false
+      lastAreaType = nil
+   end
+   
+   lastIndicatorPos = currentIndicatorPos
+   
+   local areaType = checkIndicatorPosition()
+   
+   if areaType and not hasPressed then
+      lastAreaType = areaType
+      
+      local delayToUse = (areaType == "yellow") and YellowDodgeDelay or RedDodgeDelay
+      
+      hasPressed = true
+      pressedAt = currentTime
+      
+      task.spawn(function()
+         if delayToUse > 0 then
+            task.wait(delayToUse)
+         end
+         
+         local VirtualInputManager = game:GetService("VirtualInputManager")
+         VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
+         task.wait(0.05)
+         VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
+      end)
+   end
+end)
+
+-- ============================================
+-- AUTO-ATTACK SECTION
+-- ============================================
+local AutoAttackEnabled = false
+local SelectedSkill = "Strike"
+
+local AttackToggle = DodgeTab:CreateToggle({
+   Name = "Auto-Attack",
+   CurrentValue = false,
+   Flag = "AutoAttackToggle",
+   Callback = function(Value)
+      AutoAttackEnabled = Value
+   end,
+})
+
+local SkillDropdown = DodgeTab:CreateDropdown({
+   Name = "Select Skill",
+   Options = {"Strike"},
+   CurrentOption = {"Strike"},
+   MultipleOptions = false,
+   Flag = "SkillDropdown",
+   Callback = function(Option)
+      SelectedSkill = Option[1]
+   end,
+})
+
+local RefreshButton = DodgeTab:CreateButton({
+   Name = "Refresh Skills",
+   Callback = function()
+      local player = game:GetService("Players").LocalPlayer
+      local success, skills = pcall(function()
+         local scrollFrame = player.PlayerGui.Combat.ActionBG.AttacksPage.Attack.ScrollingFrame
+         local skillList = {}
+         
+         for _, child in pairs(scrollFrame:GetChildren()) do
+            if child:IsA("TextButton") or (child:IsA("Frame") and child:FindFirstChild("TextLabel")) then
+               table.insert(skillList, child.Name)
+            end
+         end
+         
+         return skillList
+      end)
+      
+      if success and #skills > 0 then
+         SkillDropdown:Refresh(skills, true)
+         SelectedSkill = skills[1]
+      end
+   end,
+})
+
+local isAttacking = false
+local lastActionBGState = false
+
+local function performAutoAttack()
+   if isAttacking then return false end
+   isAttacking = true
+   
+   local GuiService = game:GetService("GuiService")
+   local UserInputService = game:GetService("UserInputService")
+   local VIM = game:GetService("VirtualInputManager")
+   
+   local player = game:GetService("Players").LocalPlayer
+   local actionBG = player.PlayerGui.Combat.ActionBG
+   local attackButton = actionBG.ContextPage.AttackButton
+   
+   GuiService.GuiNavigationEnabled = true
+   UserInputService.MouseIconEnabled = false
+   
+   task.wait(0.3)
+   
+   -- Step 1: Select and press AttackButton
+   GuiService.SelectedObject = attackButton
+   task.wait(0.3)
+   
+   VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+   task.wait(0.05)
+   VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+   
+   task.wait(0.5)
+   
+   if not actionBG.Visible then
+      GuiService.GuiNavigationEnabled = false
+      GuiService.SelectedObject = nil
+      UserInputService.MouseIconEnabled = true
+      isAttacking = false
+      return
+   end
+   
+   -- Step 2: Select and press Skill
+   local skillButton = actionBG.AttacksPage.Attack.ScrollingFrame:FindFirstChild(SelectedSkill)
+   
+   if not skillButton then
+      GuiService.GuiNavigationEnabled = false
+      GuiService.SelectedObject = nil
+      UserInputService.MouseIconEnabled = true
+      isAttacking = false
+      return
+   end
+   
+   GuiService.SelectedObject = skillButton
+   task.wait(0.3)
+   
+   VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+   task.wait(0.05)
+   VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+   
+   task.wait(0.5)
+   
+   if not actionBG.Visible then
+      GuiService.GuiNavigationEnabled = false
+      GuiService.SelectedObject = nil
+      UserInputService.MouseIconEnabled = true
+      isAttacking = false
+      return
+   end
+   
+   -- Step 3: Select and press Enemy (with retry until GUI disappears)
+   local enemiesScroll = actionBG.AttacksPage.Enemies.ScrollingFrame
+   local firstEnemy = nil
+   
+   for _, child in pairs(enemiesScroll:GetChildren()) do
+      if child:IsA("GuiObject") and not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
+         firstEnemy = child
+         break
+      end
+   end
+   
+   if not firstEnemy then
+      GuiService.GuiNavigationEnabled = false
+      GuiService.SelectedObject = nil
+      UserInputService.MouseIconEnabled = true
+      isAttacking = false
+      return
+   end
+   
+   -- Keep selecting enemy until GUI disappears
+   local maxAttempts = 5
+   local attempts = 0
+   
+   while actionBG.Visible and attempts < maxAttempts do
+      GuiService.SelectedObject = firstEnemy
+      task.wait(0.3)
+      
+      VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+      task.wait(0.05)
+      VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+      
+      task.wait(0.5)
+      
+      attempts = attempts + 1
+   end
+   
+   GuiService.GuiNavigationEnabled = false
+   GuiService.SelectedObject = nil
+   UserInputService.MouseIconEnabled = true
+   
+   isAttacking = false
+   return true
+end
+
+task.spawn(function()
+   local player = game:GetService("Players").LocalPlayer
+   local combat = player.PlayerGui:WaitForChild("Combat")
+   local actionBG = combat:WaitForChild("ActionBG")
+   
+   while true do
+      task.wait(0.1)
+      
+      if AutoAttackEnabled then
+         local currentState = actionBG.Visible
+         
+         if currentState and not lastActionBGState and not isAttacking then
+            task.wait(0.5)
+            performAutoAttack()
+         end
+         
+         lastActionBGState = currentState
+      else
+         lastActionBGState = false
+      end
+   end
+end)
+
+-- ============================================
+-- AUTO-ITEM SECTION
+-- ============================================
+local FarmTab = Window:CreateTab("Items", 4483362458)
+
+local AutoItemEnabled = false
+local ItemSettings = {
+    Everthistle = false,
+    Hightail = false,
+    Carnastool = false,
+    Crylight = false,
+    Cryastem = false,
+    Driproot = false,
+    ["7 Leafed Everthistle"] = false
+}
+local MoveSpeed = 300
+
+local function setNoclip(enabled)
+    local player = game:GetService("Players").LocalPlayer
+    local character = player.Character
+    if not character then return end
+    
+    for _, part in pairs(character:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = not enabled
+        end
+    end
+end
+
+local function smoothTeleportTo(targetPosition)
+    local player = game:GetService("Players").LocalPlayer
+    local character = player.Character
+    if not character or not character:FindFirstChild("HumanoidRootPart") then return false end
+    
+    local hrp = character.HumanoidRootPart
+    local startPos = hrp.Position
+    local distance = (targetPosition - startPos).Magnitude
+    local duration = distance / MoveSpeed
+    local startTime = tick()
+    
+    setNoclip(true)
+    
+    while tick() - startTime < duration and AutoItemEnabled do
+        local alpha = (tick() - startTime) / duration
+        alpha = math.min(alpha, 1)
+        
+        local newPos = startPos:Lerp(targetPosition, alpha)
+        hrp.CFrame = CFrame.new(newPos)
+        
+        task.wait()
+    end
+    
+    if AutoItemEnabled then
+        hrp.CFrame = CFrame.new(targetPosition)
+    end
+    
+    return true
+end
+
+local function collectItem(itemModel)
+    local handle = itemModel:FindFirstChild("Handle")
+    if not handle then return false end
+    
+    local clickPart = handle:FindFirstChild("ClickPart")
+    if not clickPart then return false end
+    
+    local targetPos = clickPart.Position + Vector3.new(0, 5, 0)
+    local success = smoothTeleportTo(targetPos)
+    
+    if success and AutoItemEnabled then
+        task.wait(0.3)
+        AutoItemEnabled = false
+        setNoclip(false)
+        return true
+    end
+    
+    return false
+end
+
+local function autoCollectItems()
+    while AutoItemEnabled do
+        local spawnedItems = workspace:FindFirstChild("SpawnedItems")
+        
+        if spawnedItems then
+            for _, item in pairs(spawnedItems:GetChildren()) do
+                if not AutoItemEnabled then break end
+                
+                if item:IsA("Model") then
+                    local itemName = item.Name
+                    
+                    if ItemSettings[itemName] then
+                        collectItem(item)
+                        return
+                    end
+                end
+            end
+            
+            task.wait(2)
+        else
+            task.wait(2)
+        end
+    end
+    
+    setNoclip(false)
+end
+
+local AutoItemToggle = FarmTab:CreateToggle({
+    Name = "Teleport to Item",
+    CurrentValue = false,
+    Flag = "AutoItemToggle",
+    Callback = function(Value)
+        AutoItemEnabled = Value
+        if Value then
+            task.spawn(autoCollectItems)
+        else
+            setNoclip(false)
+        end
+    end,
+})
+
+local EverthistleToggle = FarmTab:CreateToggle({
+    Name = "Teleport to Everthistle",
+    CurrentValue = false,
+    Flag = "EverthistleToggle",
+    Callback = function(Value)
+        ItemSettings.Everthistle = Value
+    end,
+})
+
+local HightailToggle = FarmTab:CreateToggle({
+    Name = "Teleport to Hightail",
+    CurrentValue = false,
+    Flag = "HightailToggle",
+    Callback = function(Value)
+        ItemSettings.Hightail = Value
+    end,
+})
+
+local CarnastoolToggle = FarmTab:CreateToggle({
+    Name = "Teleport to Carnastool",
+    CurrentValue = false,
+    Flag = "CarnastoolToggle",
+    Callback = function(Value)
+        ItemSettings.Carnastool = Value
+    end,
+})
+
+local CrylightToggle = FarmTab:CreateToggle({
+    Name = "Teleport to Crylight",
+    CurrentValue = false,
+    Flag = "CrylightToggle",
+    Callback = function(Value)
+        ItemSettings.Crylight = Value
+    end,
+})
+
+local CryastemToggle = FarmTab:CreateToggle({
+    Name = "Teleport to Cryastem",
+    CurrentValue = false,
+    Flag = "CryastemToggle",
+    Callback = function(Value)
+        ItemSettings.Cryastem = Value
+    end,
+})
+
+local DriprootToggle = FarmTab:CreateToggle({
+    Name = "Teleport to Driproot",
+    CurrentValue = false,
+    Flag = "DriprootToggle",
+    Callback = function(Value)
+        ItemSettings.Driproot = Value
+    end,
+})
+
+local SevenLeafToggle = FarmTab:CreateToggle({
+    Name = "Teleport to 7 Leafed Everthistle",
+    CurrentValue = false,
+    Flag = "SevenLeafToggle",
+    Callback = function(Value)
+        ItemSettings["7 Leafed Everthistle"] = Value
+    end,
+})
+
+task.spawn(function()
+    while true do
+        task.wait(0.5)
+        if AutoItemEnabled then
+            setNoclip(true)
+        end
+    end
+end)
+
+Rayfield:LoadConfiguration()
