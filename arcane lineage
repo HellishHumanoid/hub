@@ -160,17 +160,209 @@ game:GetService("RunService").RenderStepped:Connect(function()
 end)
 
 -- ============================================
+-- AUTO-LEVEL UP SECTION
+-- ============================================
+local AutoLevelUpEnabled = false
+local isLevelingUp = false
+
+local AutoLevelUpToggle = DodgeTab:CreateToggle({
+   Name = "Auto-Level Up",
+   CurrentValue = false,
+   Flag = "AutoLevelUpToggle",
+   Callback = function(Value)
+      AutoLevelUpEnabled = Value
+      if Value then
+         task.spawn(autoLevelUpLoop)
+      else
+         isLevelingUp = false
+      end
+   end,
+})
+
+function autoLevelUpLoop()
+    while AutoLevelUpEnabled do
+        local player = game:GetService("Players").LocalPlayer
+        local playerName = player.Name
+        
+        while AutoLevelUpEnabled do
+            local living = workspace:FindFirstChild("Living")
+            if living then
+                local playerModel = living:FindFirstChild(playerName)
+                if playerModel then
+                    local fightInProgress = playerModel:FindFirstChild("FightInProgress")
+                    if fightInProgress then
+                        task.wait(2)
+                    else
+                        break
+                    end
+                else
+                    break
+                end
+            else
+                break
+            end
+        end
+        
+        if not AutoLevelUpEnabled then break end
+        
+        isLevelingUp = true
+        
+        local AutoAttackUserEnabled = _G.AutoAttackUserEnabled
+        if AutoAttackUserEnabled then
+            _G.AutoAttackEnabled = false
+        end
+        
+        local GuiService = game:GetService("GuiService")
+        local VIM = game:GetService("VirtualInputManager")
+        
+        if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
+            task.wait(5)
+            
+            if AutoAttackUserEnabled then
+                _G.AutoAttackEnabled = true
+            end
+            
+            isLevelingUp = false
+            
+            local waitTime = 300
+            local waitStart = tick()
+            while AutoLevelUpEnabled and (tick() - waitStart) < waitTime do
+                task.wait(1)
+            end
+            continue
+        end
+        
+        local originalPosition = player.Character.HumanoidRootPart.CFrame
+        
+        local promptTriggered = false
+        local startTime = tick()
+        local duration = 2
+        
+        while not promptTriggered and (tick() - startTime) < duration do
+            for i = 1, 3 do
+                if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                    player.Character.HumanoidRootPart.CFrame = CFrame.new(790, 235, 2117)
+                end
+                
+                task.wait(0.01)
+                
+                VIM:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+                task.wait(0.01)
+                VIM:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+                
+                task.wait(0.01)
+            end
+            
+            local dialogue = player.PlayerGui:FindFirstChild("NPCDialogue")
+            if dialogue and dialogue:FindFirstChild("BG") and dialogue.BG.Visible then
+                promptTriggered = true
+            end
+        end
+        
+        if promptTriggered then
+            task.wait(1)
+            player.Character.HumanoidRootPart.CFrame = originalPosition
+            
+            local dialogue = player.PlayerGui:WaitForChild("NPCDialogue")
+            local bg = dialogue:WaitForChild("BG")
+            local options = bg:WaitForChild("Options")
+            
+            task.wait(0.5)
+            
+            local allChildren = options:GetChildren()
+            local thirdOption = allChildren[3]
+            
+            if thirdOption then
+                GuiService.GuiNavigationEnabled = true
+                
+                GuiService.SelectedObject = thirdOption
+                task.wait(0.3)
+                
+                VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+                task.wait(0.05)
+                VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+                
+                task.wait(5)
+                
+                local levelUp = player.PlayerGui:FindFirstChild("LevelUp")
+                if levelUp and levelUp:FindFirstChild("Container") then
+                    local strengthButton = levelUp.Container.Body.Buttons.Strength.Frame.StrengthUp
+                    local enduranceButton = levelUp.Container.Body.Buttons.Endurance.Frame.EnduranceUp
+                    local finishButton = levelUp.Finish
+                    
+                    for i = 1, 5 do
+                        GuiService.SelectedObject = strengthButton
+                        task.wait(0.2)
+                        
+                        VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+                        task.wait(0.02)
+                        VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+                        
+                        task.wait(0.2)
+                    end
+                    
+                    for i = 1, 5 do
+                        GuiService.SelectedObject = enduranceButton
+                        task.wait(0.2)
+                        
+                        VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+                        task.wait(0.02)
+                        VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+                        
+                        task.wait(0.2)
+                    end
+                    
+                    task.wait(0.3)
+                    GuiService.SelectedObject = finishButton
+                    task.wait(0.2)
+                    
+                    VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+                    task.wait(0.02)
+                    VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+                    
+                    task.wait(0.2)
+                    
+                    GuiService.GuiNavigationEnabled = false
+                    GuiService.SelectedObject = nil
+                end
+            end
+        end
+        
+        if AutoAttackUserEnabled then
+            _G.AutoAttackEnabled = true
+        end
+        
+        isLevelingUp = false
+        
+        local waitTime = 300
+        local waitStart = tick()
+        
+        while AutoLevelUpEnabled and (tick() - waitStart) < waitTime do
+            task.wait(1)
+        end
+        
+        if not AutoLevelUpEnabled then
+            break
+        end
+    end
+    
+    isLevelingUp = false
+end
+
+-- ============================================
 -- AUTO-ATTACK SECTION
 -- ============================================
-local AutoAttackEnabled = false
+_G.AutoAttackEnabled = false
 local SelectedSkill = "Strike"
+_G.AutoAttackUserEnabled = false
 
 local AttackToggle = DodgeTab:CreateToggle({
    Name = "Auto-Attack",
    CurrentValue = false,
    Flag = "AutoAttackToggle",
    Callback = function(Value)
-      AutoAttackEnabled = Value
+      _G.AutoAttackUserEnabled = Value
+      _G.AutoAttackEnabled = Value
    end,
 })
 
@@ -209,6 +401,42 @@ local RefreshButton = DodgeTab:CreateButton({
    end,
 })
 
+local TeleportButton = DodgeTab:CreateButton({
+   Name = "Teleport to ???",
+   Callback = function()
+      local player = game:GetService("Players").LocalPlayer
+      
+      if player.Character then
+         local humanoidRootPart = player.Character:FindFirstChild("HumanoidRootPart")
+         if humanoidRootPart then
+            humanoidRootPart.CFrame = CFrame.new(790, 235, 2117)
+         end
+      end
+   end,
+})
+
+local ResetButton = DodgeTab:CreateButton({
+   Name = "Reset",
+   Callback = function()
+      local player = game:GetService("Players").LocalPlayer
+      local TeleportService = game:GetService("TeleportService")
+      
+      -- Set HP to 0
+      if player.Character then
+         local humanoid = player.Character:FindFirstChild("Humanoid")
+         if humanoid then
+            humanoid.Health = 0
+         end
+      end
+      
+      -- Wait 0.5 seconds
+      task.wait(0.5)
+      
+      -- Rejoin the same server
+      TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, player)
+   end,
+})
+
 local isAttacking = false
 local lastActionBGState = false
 
@@ -229,7 +457,6 @@ local function performAutoAttack()
    
    task.wait(0.3)
    
-   -- Step 1: Click AttackButton until AttacksPage appears
    local attackAttempts = 0
    while actionBG.Visible and not actionBG.AttacksPage.Visible and attackAttempts < 5 do
       GuiService.SelectedObject = attackButton
@@ -251,7 +478,6 @@ local function performAutoAttack()
       return
    end
    
-   -- Step 2: Click Skill until Enemies appear
    local skillButton = actionBG.AttacksPage.Attack.ScrollingFrame:FindFirstChild(SelectedSkill)
    
    if not skillButton then
@@ -275,7 +501,6 @@ local function performAutoAttack()
       
       task.wait(0.5)
       
-      -- Check if enemies appeared
       local enemiesScroll = actionBG.AttacksPage.Enemies.ScrollingFrame
       for _, child in pairs(enemiesScroll:GetChildren()) do
          if child:IsA("GuiObject") and not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
@@ -295,7 +520,6 @@ local function performAutoAttack()
       return
    end
    
-   -- Step 3: Click Enemy until GUI disappears
    local enemiesScroll = actionBG.AttacksPage.Enemies.ScrollingFrame
    local firstEnemy = nil
    
@@ -315,7 +539,7 @@ local function performAutoAttack()
    end
    
    local enemyAttempts = 0
-   while actionBG.Visible and enemyAttempts < 5 do
+   while actionBG.Visible and enemyAttempts < 10 do
       GuiService.SelectedObject = firstEnemy
       task.wait(0.3)
       
@@ -343,7 +567,7 @@ task.spawn(function()
    while true do
       task.wait(0.1)
       
-      if AutoAttackEnabled then
+      if _G.AutoAttackEnabled and not isLevelingUp then
          local currentState = actionBG.Visible
          
          if currentState and not lastActionBGState and not isAttacking then
