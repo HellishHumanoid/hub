@@ -1,9 +1,9 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Rafso Driving Empire",
+   Name = "Hellish's Driving Empire",
    LoadingTitle = "Enjoy it.",
-   LoadingSubtitle = "by Rafso",
+   LoadingSubtitle = "by Hellish",
    ConfigurationSaving = {
       Enabled = true,
       FolderName = nil,
