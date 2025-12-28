@@ -1,13 +1,13 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Rafso Dandy's World",
+   Name = "Hellish's Dandy's World",
    LoadingTitle = "I really don't know",
-   LoadingSubtitle = "by Rafso",
+   LoadingSubtitle = "by Hellish",
    ConfigurationSaving = {
       Enabled = false,
       FolderName = nil,
-      FileName = "RafsoStuff"
+      FileName = "HellishStuff"
    },
    Discord = {
       Enabled = false,
