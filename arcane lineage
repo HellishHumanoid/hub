@@ -1,9 +1,9 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 local Window = Rayfield:CreateWindow({
-   Name = "Rafso Arcane Lineage",
+   Name = "Hellish's Arcane Lineage",
    LoadingTitle = "Idk",
-   LoadingSubtitle = "by Rafso",
+   LoadingSubtitle = "by Hellish",
    ConfigurationSaving = {
       Enabled = true,
       FolderName = nil,
@@ -166,7 +166,7 @@ local AutoLevelUpEnabled = false
 local isLevelingUp = false
 
 local AutoLevelUpToggle = DodgeTab:CreateToggle({
-   Name = "Auto-Level Up",
+   Name = "Auto-Level Up [STRENGTH & HP]",
    CurrentValue = false,
    Flag = "AutoLevelUpToggle",
    Callback = function(Value)
