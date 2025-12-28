@@ -1,11 +1,1070 @@
---PLEASE READ: Do not use it in your main account, haven't tested it properly because they take around 1 day or more to ban you from the game.
---PLEASE READ: When you first join the game join the Sahara Delivery job and execute or it won't work.
---Only tested on XENO
---Discord: literalh
---Get the Key: https://ads.luarmor.net/get_key?for=Key_System-xcsBImouADbA
-getgenv().Config = {
-    WebHookURL = "https://discord.com/api/webhooks/1453842387888767060/GV6djLrUkKzIFR8elYL17s_Behg91Po4DHR0l4cJCJ9XR09RfwwnGCbZyjX9c6R7BwQi",
-}
+-- PROPER Box Delivery Automation Script
+-- ===== CONFIGURATION =====
+local WEBHOOK_URL = ""
+if getgenv().Config and getgenv().Config.WebHookURL then
+    WEBHOOK_URL = getgenv().Config.WebHookURL
+end
+local WEBHOOK_ENABLED = WEBHOOK_URL ~= ""
 
-script_key="pCRKRASNAtfCitXsmSRFfQOUcEQNgjuX";
-loadstring(game:HttpGet("https://api.luarmor.net/files/v3/loaders/b5ad4ce798dffbbfee6f6dc1f2c9caf2.lua"))()
+local DARK_SCREEN = true
+if getgenv().Config and getgenv().Config.DarkScreen ~= nil then
+    DARK_SCREEN = getgenv().Config.DarkScreen
+end
+-- ==========================
+
+local Players = game:GetService("Players")
+local GuiService = game:GetService("GuiService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local HttpService = game:GetService("HttpService")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+local Camera = workspace.CurrentCamera
+
+-- Variable to track if we should restart the cycle
+local shouldRestartCycle = false
+
+-- Listen for character death to restart cycle
+local function onCharacterAdded(newCharacter)
+    character = newCharacter
+    humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+    shouldRestartCycle = true
+    
+    -- Listen for death on new character
+    character:WaitForChild("Humanoid").Died:Connect(function()
+        shouldRestartCycle = true
+    end)
+end
+
+player.CharacterAdded:Connect(onCharacterAdded)
+
+-- Listen for death on current character
+character:WaitForChild("Humanoid").Died:Connect(function()
+    shouldRestartCycle = true
+end)
+
+if WEBHOOK_ENABLED then
+else
+end
+
+-- Track stats for webhook
+local scriptStartMoney = 0
+local lastWebhookTime = 0
+local WEBHOOK_INTERVAL = 300 -- 5 minutes in seconds
+
+-- Delete notifications
+local function deleteNotifications()
+    pcall(function()
+        local notification = player.PlayerGui.UI.Uni:FindFirstChild("Notification")
+        if notification then
+            notification:Destroy()
+        end
+    end)
+end
+
+-- Delete notifications at script start
+deleteNotifications()
+
+-- Create black screen overlay
+local function createBlackScreen()
+    if not DARK_SCREEN then
+        return
+    end
+    
+    pcall(function()
+        local screenGui = Instance.new("ScreenGui")
+        screenGui.Name = "BlackScreenOverlay"
+        screenGui.DisplayOrder = 999999999 -- Very high display order to cover everything
+        screenGui.IgnoreGuiInset = true
+        screenGui.ResetOnSpawn = false
+        
+        local blackFrame = Instance.new("Frame")
+        blackFrame.Size = UDim2.new(1, 0, 1, 0)
+        blackFrame.Position = UDim2.new(0, 0, 0, 0)
+        blackFrame.BackgroundColor3 = Color3.new(0, 0, 0)
+        blackFrame.BorderSizePixel = 0
+        blackFrame.Parent = screenGui
+        
+        screenGui.Parent = player.PlayerGui
+    end)
+end
+
+createBlackScreen()
+
+-- Track cash before each BoxPad
+local lastCashAmount = 0
+
+-- Function to get current cash
+local function getCurrentCash()
+    local success, cash = pcall(function()
+        local cashLabel = player.PlayerGui.UI.Uni.Hud.Money.Label
+        local cashText = cashLabel.Text
+        -- Extract numbers from text (e.g. "$1,234" -> 1234)
+        local cleanText = cashText:gsub("[^%d]", "")
+        return tonumber(cleanText) or 0
+    end)
+    return success and cash or 0
+end
+
+-- Initialize starting money
+scriptStartMoney = getCurrentCash()
+
+-- Function to send webhook
+local function sendWebhook()
+    if not WEBHOOK_ENABLED then return end
+    
+    local currentMoney = getCurrentCash()
+    local totalFarmed = currentMoney - scriptStartMoney
+    
+    local embed = {
+        ["embeds"] = {{
+            ["title"] = "💰 Current Stats",
+            ["color"] = 3066993, -- Green color (0x2ECC71 in decimal)
+            ["fields"] = {
+                {
+                    ["name"] = "Current Money",
+                    ["value"] = "$" .. tostring(currentMoney),
+                    ["inline"] = false
+                },
+                {
+                    ["name"] = "Total Farmed",
+                    ["value"] = "$" .. tostring(totalFarmed),
+                    ["inline"] = false
+                }
+            },
+            ["footer"] = {
+                ["text"] = "Rafso Autofarm • " .. os.date("%I:%M %p")
+            }
+        }}
+    }
+    
+    local success, result = pcall(function()
+        return request({
+            Url = WEBHOOK_URL,
+            Method = "POST",
+            Headers = {
+                ["Content-Type"] = "application/json"
+            },
+            Body = HttpService:JSONEncode(embed)
+        })
+    end)
+    
+    if success then
+    else
+    end
+end
+
+-- Function to reset character if cash didn't increase
+local function checkCashAndReset(beforeCash)
+    local currentCash = getCurrentCash()
+    
+    if currentCash <= beforeCash then
+        -- Normal Roblox reset
+        player.Character.Humanoid.Health = 0
+        wait(10)
+        character = player.Character or player.CharacterAdded:Wait()
+        humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+        return true -- Indicates reset happened
+    else
+        return false -- No reset needed
+    end
+end
+
+local function deleteClaimMailboxes()
+    local deleted = 0
+    pcall(function()
+        if workspace:FindFirstChild("RenderObjects") then
+            for _, obj in pairs(workspace.RenderObjects:GetChildren()) do
+                pcall(function()
+                    if obj:FindFirstChild("ClaimData") then
+                        local claimMailbox = obj.ClaimData:FindFirstChild("ClaimMailbox")
+                        if claimMailbox then
+                            claimMailbox:Destroy()
+                            deleted = deleted + 1
+                        end
+                    end
+                end)
+            end
+        end
+    end)
+    
+    pcall(function()
+        for _, obj in pairs(workspace:GetDescendants()) do
+            pcall(function()
+                if obj.Name:lower():match("mailbox") then
+                    -- Don't delete if this is a ProximityPrompt child of a BoxPad
+                    local isBoxPadPrompt = false
+                    if obj:IsA("ProximityPrompt") and obj.Parent and obj.Parent.Name == "BoxPad" then
+                        isBoxPadPrompt = true
+                    end
+                    
+                    if not isBoxPadPrompt then
+                        obj:Destroy()
+                        deleted = deleted + 1
+                    end
+                end
+            end)
+        end
+    end)
+    return deleted
+end
+
+local function pressEnterKey()
+    pcall(function()
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+        task.wait(0.01)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+    end)
+end
+
+local function pressTabKey()
+    pcall(function()
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Tab, false, game)
+        task.wait(0.01)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Tab, false, game)
+    end)
+end
+
+local function faceRight()
+    humanoidRootPart.CFrame = CFrame.new(humanoidRootPart.Position) * CFrame.Angles(0, math.rad(-90), 0)
+end
+
+-- Movement system - smooth hovering at 100 studs/second with platform and walking animation
+local activePlatform = nil
+
+local function disablePlatform()
+    if activePlatform then
+        activePlatform:Destroy()
+        activePlatform = nil
+    end
+end
+
+local function smoothTeleport(targetPosition)
+    
+    -- Create platform under player if it doesn't exist
+    if not activePlatform then
+        activePlatform = Instance.new("Part")
+        activePlatform.Size = Vector3.new(6, 1, 6)
+        activePlatform.Anchored = true
+        activePlatform.CanCollide = true
+        activePlatform.Transparency = 1
+        activePlatform.Name = "WalkPlatform"
+        activePlatform.Parent = character
+    end
+    
+    -- Enable noclip for character parts
+    for _, part in pairs(character:GetDescendants()) do
+        if part:IsA("BasePart") and part.Name ~= "WalkPlatform" then
+            part.CanCollide = false
+        end
+    end
+    
+    -- Make character face the direction they're moving
+    local direction = (targetPosition - humanoidRootPart.Position).Unit
+    local targetCFrame = CFrame.new(humanoidRootPart.Position, humanoidRootPart.Position + direction)
+    
+    -- Calculate distance and time
+    local startPos = humanoidRootPart.Position
+    local distance = (targetPosition - startPos).Magnitude
+    local speed = 500 -- studs per second
+    local travelTime = distance / speed
+    
+    -- Set walking animation by setting WalkSpeed (makes it look like walking)
+    character.Humanoid.WalkSpeed = 16
+    
+    -- Hover smoothly to destination while maintaining walking appearance
+    local startTime = tick()
+    while tick() - startTime < travelTime do
+        local elapsed = tick() - startTime
+        local progress = elapsed / travelTime
+        
+        -- Lerp to target position
+        local currentPos = startPos:Lerp(targetPosition, progress)
+        
+        -- Update direction to face movement
+        local moveDirection = (targetPosition - currentPos).Unit
+        if moveDirection.Magnitude > 0 then
+            targetCFrame = CFrame.new(currentPos, currentPos + moveDirection)
+        else
+            targetCFrame = CFrame.new(currentPos)
+        end
+        
+        -- Move player smoothly with proper orientation
+        humanoidRootPart.CFrame = targetCFrame
+        
+        -- Keep platform under player
+        activePlatform.CFrame = CFrame.new(currentPos - Vector3.new(0, 3, 0))
+        
+        -- Make humanoid think it's walking (triggers walk animation)
+        character.Humanoid:Move(moveDirection, false)
+        
+        task.wait()
+    end
+    
+    -- Ensure we reach exact destination
+    humanoidRootPart.CFrame = CFrame.new(targetPosition, targetPosition + direction)
+    activePlatform.CFrame = CFrame.new(targetPosition - Vector3.new(0, 3, 0))
+    
+    -- Stop movement
+    character.Humanoid:Move(Vector3.new(0, 0, 0), false)
+    
+    -- Re-enable collisions for character parts
+    for _, part in pairs(character:GetDescendants()) do
+        if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" and part.Name ~= "WalkPlatform" then
+            part.CanCollide = true
+        end
+    end
+    
+    -- Disable platform after arriving so player can land on ground
+    disablePlatform()
+    
+end
+
+local function ensureCameraUnlocked()
+    Camera.CameraType = Enum.CameraType.Custom
+    Camera.CameraSubject = character.Humanoid
+end
+
+local function lockCamera(position, lookAt)
+    Camera.CameraType = Enum.CameraType.Scriptable
+    Camera.CFrame = CFrame.new(position, lookAt)
+end
+
+local function getAllBoxPads()
+    local boxPads = {}
+    for _, obj in pairs(workspace:GetChildren()) do
+        if obj.Name == "BoxPad" and obj:IsA("BasePart") then
+            table.insert(boxPads, obj)
+        end
+    end
+    return boxPads
+end
+
+local function checkIfBoxPadsHavePrompts(boxPads)
+    local boxPadsWithPrompts = 0
+    for _, boxPad in ipairs(boxPads) do
+        if boxPad:FindFirstChildWhichIsA("ProximityPrompt") then
+            boxPadsWithPrompts = boxPadsWithPrompts + 1
+        end
+    end
+    return boxPadsWithPrompts > 0
+end
+
+local function triggerProximityPromptProperly(targetPosition, maxDistance)
+    
+    -- Find the closest prompt EXACTLY like the working initial prompt does
+    local closestPrompt = nil
+    local closestDistance = math.huge
+    
+    for _, obj in pairs(workspace:GetDescendants()) do
+        if obj:IsA("ProximityPrompt") then
+            local distance = (targetPosition - obj.Parent.Position).Magnitude
+            if distance < maxDistance and distance < closestDistance then
+                closestPrompt = obj
+                closestDistance = distance
+            end
+        end
+    end
+    
+    if closestPrompt then
+        
+        -- Use the EXACT SAME METHOD that works for the initial prompt
+        fireproximityprompt(closestPrompt)
+        
+        return true
+    else
+        return false
+    end
+end
+
+local function deliverToBoxPad(boxPad, boxPadIndex)
+    
+    -- CHECK: Does this BoxPad have a ProximityPrompt?
+    if not boxPad:FindFirstChildWhichIsA("ProximityPrompt") then
+        return
+    end
+    
+    
+    -- NO TELEPORTING - WE'RE ALREADY AT THE BOXPAD
+    
+    -- Step 1: Lock camera down on BoxPad
+    lockCamera(boxPad.Position + Vector3.new(0, 8, 0), boxPad.Position)
+    wait(0.5)
+    
+    -- Step 2: Press E to trigger BoxPad prompt
+    pcall(function()
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+        task.wait(0.1)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+    end)
+    
+    wait(0.5)
+    
+    -- Step 3: Unlock camera (ALWAYS RUN THIS)
+    ensureCameraUnlocked()
+    faceRight()
+    wait(0.3)
+    
+    -- Step 4: Teleport to car's back ONCE (ALWAYS RUN THIS)
+    local playerCarName = player.Name .. "-Car"
+    
+    -- Wait for car to exist
+    local playerCar = workspace.SessionVehicles:FindFirstChild(playerCarName)
+    local attempts = 0
+    while not playerCar and attempts < 10 do
+        wait(0.5)
+        playerCar = workspace.SessionVehicles:FindFirstChild(playerCarName)
+        attempts = attempts + 1
+    end
+    
+    if not playerCar then
+        ensureCameraUnlocked()
+        return
+    end
+    
+    local carBody = playerCar:FindFirstChild("Body")
+    if not carBody then
+        ensureCameraUnlocked()
+        return
+    end
+    
+    local licensePlates = carBody:FindFirstChild("Wisconsin License Plates")
+    if not licensePlates then
+        ensureCameraUnlocked()
+        return
+    end
+    
+    local plates = licensePlates:FindFirstChild("Plates")
+    if not plates then
+        ensureCameraUnlocked()
+        return
+    end
+    
+    local rearPlate = plates:FindFirstChild("Rear")
+    if not rearPlate then
+        ensureCameraUnlocked()
+        return
+    end
+    
+    -- GO TO CAR
+    smoothTeleport(rearPlate.Position + Vector3.new(0, 5, 0))
+    faceRight()
+    wait(1)
+    
+    -- Step 5: Press E to trigger car prompt
+    pcall(function()
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+        task.wait(0.1)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+    end)
+    
+    wait(0.5)
+    
+    -- Step 6: Teleport back to BoxPad ONCE (ALWAYS RUN THIS)
+    smoothTeleport(boxPad.Position + Vector3.new(0, 5, 0))
+    faceRight()
+    wait(0.5)
+    
+    -- Step 7: Select the wanted box
+    local boxDeliveryUI = player.PlayerGui.UI.Uni.Interfaces.BoxDelivery
+    
+    local waitTime = 0
+    while not boxDeliveryUI.Visible and waitTime < 3 do
+        wait(0.1)
+        waitTime = waitTime + 0.1
+    end
+    
+    if not boxDeliveryUI.Visible then
+        ensureCameraUnlocked()
+        return
+    end
+    
+    wait(0.3)
+    GuiService.GuiNavigationEnabled = true
+    wait(0.2)
+    
+    local boxNeeded = boxDeliveryUI.BoxNeeded
+    local neededImageId = nil
+    
+    if boxNeeded:IsA("ImageLabel") or boxNeeded:IsA("ImageButton") then
+        neededImageId = boxNeeded.Image
+    else
+        for _, child in pairs(boxNeeded:GetDescendants()) do
+            if child:IsA("ImageLabel") or child:IsA("ImageButton") then
+                neededImageId = child.Image
+                break
+            end
+        end
+    end
+    
+    if not neededImageId then
+        GuiService.GuiNavigationEnabled = false
+        ensureCameraUnlocked()
+        return
+    end
+    
+    local matchingBoxButton = nil
+    local buttonsFolder = boxDeliveryUI.Buttons
+    local buttonNames = {"Large", "Long", "Medium", "Small", "SmallLong"}
+    
+    for _, boxName in ipairs(buttonNames) do
+        local boxButton = buttonsFolder:FindFirstChild(boxName)
+        if boxButton then
+            if boxButton:IsA("ImageLabel") or boxButton:IsA("ImageButton") then
+                if boxButton.Image == neededImageId then
+                    matchingBoxButton = boxButton
+                    break
+                end
+            end
+            
+            if not matchingBoxButton then
+                for _, child in pairs(boxButton:GetDescendants()) do
+                    if child:IsA("ImageLabel") or child:IsA("ImageButton") then
+                        if child.Image == neededImageId then
+                            matchingBoxButton = boxButton
+                            break
+                        end
+                    end
+                end
+            end
+            
+            if matchingBoxButton then break end
+        end
+    end
+    
+    if not matchingBoxButton then
+        GuiService.GuiNavigationEnabled = false
+        ensureCameraUnlocked()
+        return
+    end
+    
+    
+    local clickableButton = matchingBoxButton
+    if not (clickableButton:IsA("ImageButton") or clickableButton:IsA("TextButton")) then
+        clickableButton = clickableButton:FindFirstChildWhichIsA("ImageButton") 
+            or clickableButton:FindFirstChildWhichIsA("TextButton")
+            or clickableButton:FindFirstChild("Button")
+    end
+    
+    if clickableButton then
+        GuiService.SelectedObject = clickableButton
+        wait(0.3)
+        
+        -- Step 8: Press Enter
+        pressEnterKey()
+        wait(0.3)
+        
+        pcall(function()
+            for _, conn in pairs(getconnections(clickableButton.Activated)) do
+                conn:Fire()
+            end
+        end)
+        
+        pcall(function()
+            for _, conn in pairs(getconnections(clickableButton.MouseButton1Click)) do
+                conn:Fire()
+            end
+        end)
+        
+        pcall(function() firesignal(clickableButton.MouseButton1Click) end)
+        pcall(function() firesignal(clickableButton.Activated) end)
+        
+        GuiService.SelectedObject = nil
+    end
+    
+    GuiService.GuiNavigationEnabled = false
+    wait(0.2)
+    
+    -- Step 9: Lock camera down on BoxPad
+    lockCamera(boxPad.Position + Vector3.new(0, 1.5, 0), boxPad.Position)
+    wait(1)
+    
+    -- Step 10: Unlock camera
+    ensureCameraUnlocked()
+    faceRight()
+    
+end
+
+-- MAIN LOOP
+while true do
+    -- Check if we should restart due to death
+    if shouldRestartCycle then
+        shouldRestartCycle = false
+        wait(10) -- Wait for respawn
+        character = player.Character or player.CharacterAdded:Wait()
+        humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+        activePlatform = nil -- Reset platform
+        continue -- Restart the cycle
+    end
+    
+    -- Check if 5 minutes passed and send webhook
+    local currentTime = tick()
+    if WEBHOOK_ENABLED and (currentTime - lastWebhookTime) >= WEBHOOK_INTERVAL then
+        sendWebhook()
+        lastWebhookTime = currentTime
+    end
+    
+    
+    ensureCameraUnlocked()
+    
+    -- STEP 1: Teleport to start
+    smoothTeleport(Vector3.new(1306, -78, -9967))
+    faceRight()
+    humanoidRootPart.Anchored = true
+    character.Humanoid.WalkSpeed = 0
+    character.Humanoid.JumpPower = 0
+    wait(0.5)
+    deleteClaimMailboxes()
+    wait(0.5)
+    
+    -- STEP 2: Trigger initial prompt by pressing E
+    pcall(function()
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+        task.wait(0.1)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+    end)
+    
+    wait(0.5)
+    
+    -- STEP 3: Unfreeze (ALWAYS RUN THIS)
+    humanoidRootPart.Anchored = false
+    character.Humanoid.WalkSpeed = 16
+    character.Humanoid.JumpPower = 50
+    faceRight()
+    wait(0.5)
+    
+    -- STEP 4: Click all boxes 10 times each
+    pcall(function()
+        local playerGui = player:WaitForChild("PlayerGui")
+        local buttonsFolder = playerGui:WaitForChild("UI").Uni.Interfaces.BoxDelivery.Buttons
+        
+        local buttonNames = {"Small", "Medium", "Large", "Long", "SmallLong"}
+        
+        for _, name in ipairs(buttonNames) do
+            local button = buttonsFolder:FindFirstChild(name)
+            if button then
+                local clickableButton = button
+                
+                -- Find the actual clickable button
+                if not (clickableButton:IsA("ImageButton") or clickableButton:IsA("TextButton")) then
+                    clickableButton = clickableButton:FindFirstChildWhichIsA("ImageButton") 
+                        or clickableButton:FindFirstChildWhichIsA("TextButton")
+                        or clickableButton:FindFirstChild("Button")
+                end
+                
+                if clickableButton then
+                    GuiService.SelectedObject = clickableButton
+                    
+                    -- CONTINUOUSLY SPAM CLICK FOR 0.3 SECONDS
+                    local startTime = tick()
+                    while tick() - startTime < 0.3 do
+                        pcall(function()
+                            for _, conn in pairs(getconnections(clickableButton.Activated)) do
+                                conn:Fire()
+                            end
+                        end)
+                        pcall(function()
+                            for _, conn in pairs(getconnections(clickableButton.MouseButton1Click)) do
+                                conn:Fire()
+                            end
+                        end)
+                        pcall(function() firesignal(clickableButton.MouseButton1Click) end)
+                        pcall(function() firesignal(clickableButton.Activated) end)
+                        pressEnterKey()
+                        task.wait()
+                    end
+                    
+                    wait(0.3)
+                end
+            end
+        end
+        
+        wait(0.3)
+        local boxDeliveryUI = playerGui.UI.Uni.Interfaces.BoxDelivery
+        local closeButton = boxDeliveryUI:FindFirstChild("Close") or boxDeliveryUI:FindFirstChild("X") or boxDeliveryUI:FindFirstChild("Exit")
+        
+        if closeButton then
+            pcall(function()
+                for _, conn in pairs(getconnections(closeButton.MouseButton1Click)) do
+                    conn:Fire()
+                end
+            end)
+        else
+            pcall(function() boxDeliveryUI.Visible = false end)
+        end
+        
+        GuiService.SelectedObject = nil
+        
+        -- STOP THE NAVIGATION UI
+        pcall(function() GuiService.GuiNavigationEnabled = false end)
+    end)
+    
+    wait(0.5)
+    
+    -- STEP 5: Get BoxPads
+    local boxPads = getAllBoxPads()
+    
+    if #boxPads > 0 then
+        local firstBoxPad = boxPads[1]
+        
+        -- STEP 6: Teleport to first BoxPad
+        smoothTeleport(firstBoxPad.Position + Vector3.new(0, 10, 0))
+        faceRight()
+        humanoidRootPart.Anchored = true
+        character.Humanoid.WalkSpeed = 0
+        character.Humanoid.JumpPower = 0
+        wait(0.3)
+        
+        -- STEP 7: Wait 3 seconds FROZEN
+        wait(3)
+        
+        -- STEP 8: Unfreeze
+        humanoidRootPart.Anchored = false
+        character.Humanoid.WalkSpeed = 16
+        character.Humanoid.JumpPower = 50
+        faceRight()
+        wait(0.3)
+        
+        -- STEP 9: Delete mailboxes
+        deleteClaimMailboxes()
+        wait(0.3)
+        
+        -- STEP 10: START NAVIGATION UI AGAIN and spawn car
+        GuiService.GuiNavigationEnabled = true
+        wait(0.2)
+        local garageButton = player.PlayerGui.UI.Uni.Hud.Navbar.Garage
+        if garageButton then
+            GuiService.SelectedObject = garageButton
+            wait(0.2)
+            pressEnterKey()
+            pcall(function()
+                for _, conn in pairs(getconnections(garageButton.Activated)) do conn:Fire() end
+            end)
+            pcall(function()
+                for _, conn in pairs(getconnections(garageButton.MouseButton1Click)) do conn:Fire() end
+            end)
+            pcall(function() firesignal(garageButton.MouseButton1Click) end)
+            
+            wait(0.5)
+            
+            local jobCar = player.PlayerGui.UI.Uni.Interfaces.Garage.JobCars.CarsList.JobCar4548
+            if jobCar then
+                GuiService.SelectedObject = jobCar
+                wait(0.2)
+                
+                for i = 1, 3 do
+                    pressEnterKey()
+                    pcall(function()
+                        for _, conn in pairs(getconnections(jobCar.Activated)) do conn:Fire() end
+                    end)
+                    pcall(function()
+                        for _, conn in pairs(getconnections(jobCar.MouseButton1Click)) do conn:Fire() end
+                    end)
+                    pcall(function() firesignal(jobCar.MouseButton1Click) end)
+                    pcall(function() firesignal(jobCar.Activated) end)
+                    wait(0.15)
+                end
+                
+                GuiService.SelectedObject = nil
+                GuiService.GuiNavigationEnabled = false
+                faceRight()
+                
+                wait(1.5)
+                deleteClaimMailboxes()
+                
+                local playerCarName = player.Name .. "-Car"
+                local playerCar = workspace.SessionVehicles:FindFirstChild(playerCarName)
+                
+                if playerCar then
+                else
+                end
+                
+                local waitAttempts = 0
+                while not playerCar and waitAttempts < 8 do
+                    wait(0.5)
+                    playerCar = workspace.SessionVehicles:FindFirstChild(playerCarName)
+                    waitAttempts = waitAttempts + 1
+                end
+                
+                -- If car still not spawned, rotate and try again
+                if not playerCar then
+                    pressTabKey()
+                    wait(0.2)
+                    pressTabKey()
+                    wait(0.3)
+                    
+                    humanoidRootPart.CFrame = humanoidRootPart.CFrame * CFrame.Angles(0, math.rad(180), 0)
+                    wait(0.5)
+                    
+                    -- Retry spawning
+                    local garageButtonRetry = player.PlayerGui.UI.Uni.Hud.Navbar.Garage
+                    if garageButtonRetry then
+                        GuiService.SelectedObject = garageButtonRetry
+                        wait(0.2)
+                        pressEnterKey()
+                        pcall(function()
+                            for _, conn in pairs(getconnections(garageButtonRetry.Activated)) do conn:Fire() end
+                        end)
+                        pcall(function()
+                            for _, conn in pairs(getconnections(garageButtonRetry.MouseButton1Click)) do conn:Fire() end
+                        end)
+                        
+                        wait(0.5)
+                        
+                        local jobCarRetry = player.PlayerGui.UI.Uni.Interfaces.Garage.JobCars.CarsList.JobCar4548
+                        if jobCarRetry then
+                            GuiService.SelectedObject = jobCarRetry
+                            wait(0.2)
+                            
+                            for i = 1, 3 do
+                                pressEnterKey()
+                                pcall(function()
+                                    for _, conn in pairs(getconnections(jobCarRetry.Activated)) do conn:Fire() end
+                                end)
+                                pcall(function()
+                                    for _, conn in pairs(getconnections(jobCarRetry.MouseButton1Click)) do conn:Fire() end
+                                end)
+                                wait(0.15)
+                            end
+                            
+                            GuiService.SelectedObject = nil
+                            GuiService.GuiNavigationEnabled = false
+                            faceRight()
+                            
+                            wait(1.5)
+                            
+                            playerCar = workspace.SessionVehicles:FindFirstChild(playerCarName)
+                            waitAttempts = 0
+                            while not playerCar and waitAttempts < 8 do
+                                wait(0.5)
+                                playerCar = workspace.SessionVehicles:FindFirstChild(playerCarName)
+                                waitAttempts = waitAttempts + 1
+                            end
+                            
+                            -- If car spawned after retry, press Tab twice
+                            if playerCar then
+                                pressTabKey()
+                                wait(0.2)
+                                pressTabKey()
+                                wait(0.3)
+                            end
+                        end
+                    end
+                end
+                
+                if playerCar then
+                    wait(0.5)
+                    
+                    -- STEP 11: Press Tab TWICE after car spawns
+                    pressTabKey()
+                    wait(0.2)
+                    pressTabKey()
+                    wait(0.3)
+                    
+                    -- STEP 12: Deliver to all BoxPads
+                    
+                    -- CHECK: Do any BoxPads have ProximityPrompts?
+                    if not checkIfBoxPadsHavePrompts(boxPads) then
+                        break
+                    end
+                    
+                    for i, boxPad in ipairs(boxPads) do
+                        -- Check if player died
+                        if shouldRestartCycle then
+                            break
+                        end
+                        
+                        -- Variable to track cash before this BoxPad
+                        local cashBefore = 0
+                        
+                        -- If not the first BoxPad, teleport 10 studs up and freeze for 3 seconds
+                        if i > 1 then
+                            
+                            -- Record cash before teleporting
+                            cashBefore = getCurrentCash()
+                            
+                            smoothTeleport(boxPad.Position + Vector3.new(0, 10, 0))
+                            faceRight()
+                            humanoidRootPart.Anchored = true
+                            character.Humanoid.WalkSpeed = 0
+                            character.Humanoid.JumpPower = 0
+                            wait(3)
+                            humanoidRootPart.Anchored = false
+                            character.Humanoid.WalkSpeed = 16
+                            character.Humanoid.JumpPower = 50
+                            faceRight()
+                            wait(0.3)
+                            
+                            -- Delete mailboxes
+                            deleteClaimMailboxes()
+                            wait(0.3)
+                            
+                            -- Spawn car for this BoxPad
+                            GuiService.GuiNavigationEnabled = true
+                            wait(0.2)
+                            
+                            local garageButton = player.PlayerGui.UI.Uni.Hud.Navbar.Garage
+                            if garageButton then
+                                GuiService.SelectedObject = garageButton
+                                wait(0.2)
+                                pressEnterKey()
+                                pcall(function()
+                                    for _, conn in pairs(getconnections(garageButton.Activated)) do conn:Fire() end
+                                end)
+                                pcall(function()
+                                    for _, conn in pairs(getconnections(garageButton.MouseButton1Click)) do conn:Fire() end
+                                end)
+                                pcall(function() firesignal(garageButton.MouseButton1Click) end)
+                                
+                                wait(0.5)
+                                
+                                local jobCar = player.PlayerGui.UI.Uni.Interfaces.Garage.JobCars.CarsList.JobCar4548
+                                if jobCar then
+                                    GuiService.SelectedObject = jobCar
+                                    wait(0.2)
+                                    
+                                    for j = 1, 3 do
+                                        pressEnterKey()
+                                        pcall(function()
+                                            for _, conn in pairs(getconnections(jobCar.Activated)) do conn:Fire() end
+                                        end)
+                                        pcall(function()
+                                            for _, conn in pairs(getconnections(jobCar.MouseButton1Click)) do conn:Fire() end
+                                        end)
+                                        pcall(function() firesignal(jobCar.MouseButton1Click) end)
+                                        pcall(function() firesignal(jobCar.Activated) end)
+                                        wait(0.15)
+                                    end
+                                    
+                                    GuiService.SelectedObject = nil
+                                    GuiService.GuiNavigationEnabled = false
+                                    faceRight()
+                                    
+                                    wait(1.5)
+                                    deleteClaimMailboxes()
+                                    
+                                    -- Wait for car to spawn
+                                    local playerCarName = player.Name .. "-Car"
+                                    local playerCarCheck = workspace.SessionVehicles:FindFirstChild(playerCarName)
+                                    
+                                    if playerCarCheck then
+                                    else
+                                    end
+                                    
+                                    local waitAttempts = 0
+                                    while not playerCarCheck and waitAttempts < 8 do
+                                        wait(0.5)
+                                        playerCarCheck = workspace.SessionVehicles:FindFirstChild(playerCarName)
+                                        waitAttempts = waitAttempts + 1
+                                    end
+                                    
+                                    -- If car still not spawned, rotate and try again
+                                    if not playerCarCheck then
+                                        pressTabKey()
+                                        wait(0.2)
+                                        pressTabKey()
+                                        wait(0.3)
+                                        
+                                        humanoidRootPart.CFrame = humanoidRootPart.CFrame * CFrame.Angles(0, math.rad(180), 0)
+                                        wait(0.5)
+                                        
+                                        -- Retry spawning
+                                        local garageButtonRetry = player.PlayerGui.UI.Uni.Hud.Navbar.Garage
+                                        if garageButtonRetry then
+                                            GuiService.SelectedObject = garageButtonRetry
+                                            wait(0.2)
+                                            pressEnterKey()
+                                            pcall(function()
+                                                for _, conn in pairs(getconnections(garageButtonRetry.Activated)) do conn:Fire() end
+                                            end)
+                                            pcall(function()
+                                                for _, conn in pairs(getconnections(garageButtonRetry.MouseButton1Click)) do conn:Fire() end
+                                            end)
+                                            
+                                            wait(0.5)
+                                            
+                                            local jobCarRetry = player.PlayerGui.UI.Uni.Interfaces.Garage.JobCars.CarsList.JobCar4548
+                                            if jobCarRetry then
+                                                GuiService.SelectedObject = jobCarRetry
+                                                wait(0.2)
+                                                
+                                                for j = 1, 3 do
+                                                    pressEnterKey()
+                                                    pcall(function()
+                                                        for _, conn in pairs(getconnections(jobCarRetry.Activated)) do conn:Fire() end
+                                                    end)
+                                                    pcall(function()
+                                                        for _, conn in pairs(getconnections(jobCarRetry.MouseButton1Click)) do conn:Fire() end
+                                                    end)
+                                                    wait(0.15)
+                                                end
+                                                
+                                                GuiService.SelectedObject = nil
+                                                GuiService.GuiNavigationEnabled = false
+                                                faceRight()
+                                                
+                                                wait(1.5)
+                                                
+                                                playerCarCheck = workspace.SessionVehicles:FindFirstChild(playerCarName)
+                                                waitAttempts = 0
+                                                while not playerCarCheck and waitAttempts < 8 do
+                                                    wait(0.5)
+                                                    playerCarCheck = workspace.SessionVehicles:FindFirstChild(playerCarName)
+                                                    waitAttempts = waitAttempts + 1
+                                                end
+                                                
+                                                -- If car spawned after retry, press Tab twice
+                                                if playerCarCheck then
+                                                    pressTabKey()
+                                                    wait(0.2)
+                                                    pressTabKey()
+                                                    wait(0.3)
+                                                end
+                                            end
+                                        end
+                                    end
+                                    
+                                    if playerCarCheck then
+                                        wait(0.5)
+                                        pressTabKey()
+                                        wait(0.2)
+                                        pressTabKey()
+                                        wait(0.3)
+                                    end
+                                end
+                            end
+                        end
+                        
+                        -- ENSURE PLAYER IS UNFROZEN before delivery
+                        humanoidRootPart.Anchored = false
+                        character.Humanoid.WalkSpeed = 16
+                        character.Humanoid.JumpPower = 50
+                        faceRight()
+                        wait(0.3)
+                        
+                        deliverToBoxPad(boxPad, i)
+                        wait(0.5)
+                        ensureCameraUnlocked()
+                        
+                        -- Check if cash increased after delivery (only for BoxPad #2+)
+                        if i > 1 then
+                            wait(2) -- Give time for cash to update
+                            if checkCashAndReset(cashBefore) then
+                                -- Reset happened, break out and restart cycle
+                                break
+                            end
+                        end
+                    end
+                    
+                    wait(2)
+                else
+                end
+            end
+        end
+    else
+        wait(2)
+    end
+    
+    ensureCameraUnlocked()
+end
