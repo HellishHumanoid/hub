@@ -208,8 +208,9 @@ function Hellish:CreateWindow(config)
     MainFrame.BackgroundColor3 = Color3.fromRGB(15, 10, 10)
     MainFrame.BorderSizePixel = 0
     MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
-    MainFrame.Size = UDim2.new(0, 700, 0, 450)
+    MainFrame.Size = UDim2.new(0, 0, 0, 0)  -- Start at 0 size
     MainFrame.ClipsDescendants = true
+    MainFrame.Visible = true  -- Keep visible but at 0 size
     
     local MainGradient = Instance.new("UIGradient")
     MainGradient.Color = ColorSequence.new{
@@ -518,12 +519,24 @@ function Hellish:CreateWindow(config)
     
     -- Mobile Optimization
     if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
-        MainFrame.Size = UDim2.new(0.92, 0, 0, 500)
+        -- Mobile size will be set after animation
     end
     
-    -- Entrance Animation
-    MainFrame.Size = UDim2.new(0, 0, 0, 0)
-    CreateTween(MainFrame, {Size = UDim2.new(0, 700, 0, 450)}, 0.4)
+    -- Entrance Animation - Start immediately
+    task.spawn(function()
+        task.wait(0.1)  -- Small delay to ensure everything is loaded
+        
+        -- Adjust size for mobile before animation
+        local targetWidth = 700
+        local targetHeight = 450
+        
+        if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
+            targetWidth = math.floor(ScreenGui.AbsoluteSize.X * 0.92)
+            targetHeight = 500
+        end
+        
+        CreateTween(MainFrame, {Size = UDim2.new(0, targetWidth, 0, targetHeight)}, 0.4)
+    end)
     
     -- Window Object
     local Window = {}
