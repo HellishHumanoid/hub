@@ -675,13 +675,14 @@ function Hellish:CreateWindow(config)
             SectionTitle.Name = "SectionTitle"
             SectionTitle.Parent = SectionFrame
             SectionTitle.BackgroundTransparency = 1
-            SectionTitle.Position = UDim2.new(0, 0, 0, 15)
-            SectionTitle.Size = UDim2.new(1, 0, 0, 20)
+            SectionTitle.Position = UDim2.new(0, 0, 0, 10)
+            SectionTitle.Size = UDim2.new(1, 0, 0, 25)
             SectionTitle.Font = Enum.Font.GothamBold
             SectionTitle.Text = sectionName
             SectionTitle.TextColor3 = Color3.fromRGB(255, 200, 100)
             SectionTitle.TextSize = 14
             SectionTitle.TextXAlignment = Enum.TextXAlignment.Left
+            SectionTitle.ZIndex = 2
             
             local TitleGradient = Instance.new("UIGradient")
             TitleGradient.Color = ColorSequence.new{
@@ -702,7 +703,7 @@ function Hellish:CreateWindow(config)
             Container.Name = "Container"
             Container.Parent = SectionFrame
             Container.BackgroundTransparency = 1
-            Container.Position = UDim2.new(0, 0, 0, 43)
+            Container.Position = UDim2.new(0, 0, 0, 48)
             Container.Size = UDim2.new(1, 0, 0, 0)
             Container.AutomaticSize = Enum.AutomaticSize.Y
             
