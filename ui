@@ -439,14 +439,15 @@ function Hellish:CreateWindow(config)
     IconStroke.Thickness = 2
     IconStroke.Parent = MinimizedIcon
     
-    local IconLabel = Instance.new("TextLabel")
-    IconLabel.Parent = MinimizedIcon
-    IconLabel.BackgroundTransparency = 1
-    IconLabel.Size = UDim2.new(1, 0, 1, 0)
-    IconLabel.Font = Enum.Font.GothamBold
-    IconLabel.Text = "🔥"
-    IconLabel.TextColor3 = Color3.fromRGB(255, 140, 0)
-    IconLabel.TextSize = 24
+    local IconLogo = Instance.new("ImageLabel")
+    IconLogo.Name = "IconLogo"
+    IconLogo.Parent = MinimizedIcon
+    IconLogo.BackgroundTransparency = 1
+    IconLogo.Position = UDim2.new(0.5, 0, 0.5, 0)
+    IconLogo.AnchorPoint = Vector2.new(0.5, 0.5)
+    IconLogo.Size = UDim2.new(0, 35, 0, 35)
+    IconLogo.Image = "rbxassetid://109784990018884"
+    IconLogo.ScaleType = Enum.ScaleType.Fit
     
     -- Minimize/Restore Logic
     CloseButton.MouseButton1Click:Connect(function()
@@ -456,15 +457,6 @@ function Hellish:CreateWindow(config)
         MinimizedIcon.Visible = true
         MinimizedIcon.Size = UDim2.new(0, 0, 0, 0)
         CreateTween(MinimizedIcon, {Size = UDim2.new(0, 50, 0, 50)}, 0.2)
-    end)
-    
-    MinimizedIcon.MouseButton1Click:Connect(function()
-        CreateTween(MinimizedIcon, {Size = UDim2.new(0, 0, 0, 0)}, 0.2)
-        wait(0.2)
-        MinimizedIcon.Visible = false
-        MainFrame.Visible = true
-        MainFrame.Size = UDim2.new(0, 0, 0, 0)
-        CreateTween(MainFrame, {Size = UDim2.new(0, 700, 0, 450)}, 0.3)
     end)
     
     -- Hover Effects
@@ -490,10 +482,12 @@ function Hellish:CreateWindow(config)
     -- Dragging Minimized Icon
     local iconDragging = false
     local iconDragStart, iconStartPos
+    local iconWasDragged = false
     
     MinimizedIcon.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             iconDragging = true
+            iconWasDragged = false
             iconDragStart = input.Position
             iconStartPos = MinimizedIcon.Position
         end
@@ -508,6 +502,10 @@ function Hellish:CreateWindow(config)
     UserInputService.InputChanged:Connect(function(input)
         if iconDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
             local delta = input.Position - iconDragStart
+            -- If moved more than 5 pixels, consider it a drag
+            if math.abs(delta.X) > 5 or math.abs(delta.Y) > 5 then
+                iconWasDragged = true
+            end
             MinimizedIcon.Position = UDim2.new(
                 iconStartPos.X.Scale,
                 iconStartPos.X.Offset + delta.X,
@@ -515,6 +513,19 @@ function Hellish:CreateWindow(config)
                 iconStartPos.Y.Offset + delta.Y
             )
         end
+    end)
+    
+    MinimizedIcon.MouseButton1Click:Connect(function()
+        -- Only restore UI if icon wasn't dragged
+        if not iconWasDragged then
+            CreateTween(MinimizedIcon, {Size = UDim2.new(0, 0, 0, 0)}, 0.2)
+            wait(0.2)
+            MinimizedIcon.Visible = false
+            MainFrame.Visible = true
+            MainFrame.Size = UDim2.new(0, 0, 0, 0)
+            CreateTween(MainFrame, {Size = UDim2.new(0, 700, 0, 450)}, 0.3)
+        end
+        iconWasDragged = false
     end)
     
     -- Mobile Optimization
