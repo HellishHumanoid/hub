@@ -650,7 +650,13 @@ function Hellish:CreateWindow(config)
         
         -- Select first tab by default
         if #Window.Tabs == 1 then
-            TabButton.MouseButton1Click:Fire()
+            -- Directly show the first tab without animation delay
+            TabContent.Visible = true
+            Indicator.Visible = true
+            TabTitle.Text = tabName
+            TabButton.BackgroundColor3 = Color3.fromRGB(25, 18, 15)
+            TabText.TextColor3 = Color3.fromRGB(255, 255, 255)
+            Window.CurrentTab = Tab
         end
         
         function Tab:CreateSection(sectionName)
