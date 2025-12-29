@@ -1596,6 +1596,24 @@ function Hellish:CreateWindow(config)
                         CreateTween(ButtonStroke, {Color = Color3.fromRGB(50, 35, 25)}, 0.15)
                         ConfigLibrary.CurrentConfig[KeybindName] = input.KeyCode.Name
                     elseif not gameProcessed and not listening and input.KeyCode == currentKey and input.UserInputType == Enum.UserInputType.Keyboard then
+                        -- Toggle UI visibility
+                        if MainFrame.Visible then
+                            -- Minimize UI
+                            CreateTween(MainFrame, {Size = UDim2.new(0, 0, 0, 0)}, 0.3)
+                            wait(0.3)
+                            MainFrame.Visible = false
+                            MinimizedIcon.Visible = true
+                            MinimizedIcon.Size = UDim2.new(0, 0, 0, 0)
+                            CreateTween(MinimizedIcon, {Size = UDim2.new(0, 50, 0, 50)}, 0.2)
+                        else
+                            -- Restore UI
+                            CreateTween(MinimizedIcon, {Size = UDim2.new(0, 0, 0, 0)}, 0.2)
+                            wait(0.2)
+                            MinimizedIcon.Visible = false
+                            MainFrame.Visible = true
+                            MainFrame.Size = UDim2.new(0, 0, 0, 0)
+                            CreateTween(MainFrame, {Size = UDim2.new(0, 700, 0, 450)}, 0.3)
+                        end
                         KeybindCallback(currentKey)
                     end
                 end)
