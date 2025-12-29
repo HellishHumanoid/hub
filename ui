@@ -1339,16 +1339,14 @@ function Hellish:CreateWindow(config)
                     CheckStroke.Thickness = 2
                     CheckStroke.Parent = OptionCheckbox
                     
-                    local Checkmark = Instance.new("TextLabel")
-                    Checkmark.Parent = OptionCheckbox
-                    Checkmark.BackgroundTransparency = 1
-                    Checkmark.Size = UDim2.new(1, 0, 1, 0)
-                    Checkmark.Font = Enum.Font.GothamBold
-                    Checkmark.Text = "✓"
-                    Checkmark.TextColor3 = Color3.fromRGB(255, 200, 100)
-                    Checkmark.TextSize = 12
-                    Checkmark.Visible = selected[option] or false
-                    Checkmark.ZIndex = 13
+                    local CheckGradient = Instance.new("UIGradient")
+                    CheckGradient.Color = ColorSequence.new{
+                        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 220, 100)),
+                        ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 140, 0))
+                    }
+                    CheckGradient.Rotation = 90
+                    CheckGradient.Parent = OptionCheckbox
+                    CheckGradient.Enabled = selected[option] or false
                     
                     local OptionLabel = Instance.new("TextLabel")
                     OptionLabel.Parent = OptionFrame
@@ -1371,7 +1369,14 @@ function Hellish:CreateWindow(config)
                     
                     OptionButton.MouseButton1Click:Connect(function()
                         selected[option] = not selected[option]
-                        Checkmark.Visible = selected[option]
+                        CheckGradient.Enabled = selected[option]
+                        
+                        if selected[option] then
+                            OptionCheckbox.BackgroundColor3 = Color3.fromRGB(255, 180, 0)
+                        else
+                            OptionCheckbox.BackgroundColor3 = Color3.fromRGB(20, 15, 12)
+                        end
+                        
                         updateText()
                     end)
                     
