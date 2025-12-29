@@ -265,7 +265,7 @@ function Hellish:CreateWindow(config)
     BrandLogo.BackgroundTransparency = 1
     BrandLogo.Position = UDim2.new(0, 12, 0, 12)
     BrandLogo.Size = UDim2.new(0, 38, 0, 38)
-    BrandLogo.Image = "rbxassetid://84760901348186"
+    BrandLogo.Image = "rbxassetid://109784990018884"
     BrandLogo.ScaleType = Enum.ScaleType.Fit
     
     local BrandName = Instance.new("TextLabel")
