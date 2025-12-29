@@ -1,19 +1,19 @@
 local Hellish = loadstring(game:HttpGet("https://raw.githubusercontent.com/HellishHumanoid/hub/refs/heads/main/ui"))()
 
 local Window = Hellish:CreateWindow({
-   Name = "Hellish's Arcane Lineage",
+   Name = "Hellish's AL",
    ConfigurationSaving = {
       Enabled = true,
       FolderName = "HellishArcane",
-      FileName = "AutoScript"
+      FileName = "HellishShi"
    }
 })
 
 -- ============================================
--- AUTO-DODGE SECTION
+-- MAIN SECTION
 -- ============================================
-local DodgeTab = Window:CreateTab("Auto-Dodge")
-local DodgeSection = DodgeTab:CreateSection("Dodge Settings")
+local DodgeTab = Window:CreateTab("Main")
+local DodgeSection = DodgeTab:CreateSection("Main Settings")
 
 local AutoDodgeEnabled = false
 local YellowDodgeDelay = 0
@@ -285,7 +285,7 @@ function autoLevelUpLoop()
                 task.wait(0.05)
                 VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
                 
-                task.wait(5)
+                task.wait(8)
                 
                 local levelUp = player.PlayerGui:FindFirstChild("LevelUp")
                 if levelUp and levelUp:FindFirstChild("Container") then
@@ -304,15 +304,17 @@ function autoLevelUpLoop()
                     for _, statName in pairs(SelectedStats) do
                         local statButton = statButtons[statName]
                         if statButton then
+                            print("Leveling up", statName, "5 times")
                             for i = 1, 5 do
                                 GuiService.SelectedObject = statButton
-                                task.wait(0.2)
+                                task.wait(0.3)
                                 
                                 VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
-                                task.wait(0.02)
+                                task.wait(0.05)
                                 VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
                                 
-                                task.wait(0.2)
+                                task.wait(0.3)
+                                print("Click", i, "for", statName)
                             end
                         end
                     end
@@ -694,75 +696,35 @@ local function autoCollectItems()
     setNoclip(false)
 end
 
-ItemSection:CreateToggle({
+ItemSection:CreateButton({
     Name = "Teleport to Item",
-    Description = "Automatically teleport to selected items",
-    Default = false,
-    Callback = function(Value)
-        AutoItemEnabled = Value
-        if Value then
+    Callback = function()
+        if not AutoItemEnabled then
+            AutoItemEnabled = true
             task.spawn(autoCollectItems)
-        else
-            setNoclip(false)
         end
     end,
 })
 
 local ItemTypesSection = FarmTab:CreateSection("Item Types")
 
-ItemTypesSection:CreateToggle({
-    Name = "Teleport to Everthistle",
-    Default = false,
-    Callback = function(Value)
-        ItemSettings.Everthistle = Value
-    end,
-})
+local SelectedItem = nil
 
-ItemTypesSection:CreateToggle({
-    Name = "Teleport to Hightail",
-    Default = false,
+ItemTypesSection:CreateDropdown({
+    Name = "Select Item",
+    Options = {"Everthistle", "Hightail", "Carnastool", "Crylight", "Cryastem", "Driproot", "7 Leafed Everthistle"},
     Callback = function(Value)
-        ItemSettings.Hightail = Value
-    end,
-})
-
-ItemTypesSection:CreateToggle({
-    Name = "Teleport to Carnastool",
-    Default = false,
-    Callback = function(Value)
-        ItemSettings.Carnastool = Value
-    end,
-})
-
-ItemTypesSection:CreateToggle({
-    Name = "Teleport to Crylight",
-    Default = false,
-    Callback = function(Value)
-        ItemSettings.Crylight = Value
-    end,
-})
-
-ItemTypesSection:CreateToggle({
-    Name = "Teleport to Cryastem",
-    Default = false,
-    Callback = function(Value)
-        ItemSettings.Cryastem = Value
-    end,
-})
-
-ItemTypesSection:CreateToggle({
-    Name = "Teleport to Driproot",
-    Default = false,
-    Callback = function(Value)
-        ItemSettings.Driproot = Value
-    end,
-})
-
-ItemTypesSection:CreateToggle({
-    Name = "Teleport to 7 Leafed Everthistle",
-    Default = false,
-    Callback = function(Value)
-        ItemSettings["7 Leafed Everthistle"] = Value
+        -- Clear all previous selections
+        for key in pairs(ItemSettings) do
+            ItemSettings[key] = false
+        end
+        
+        -- Set the newly selected item
+        if Value then
+            SelectedItem = Value
+            ItemSettings[Value] = true
+            print("Selected Item:", Value)
+        end
     end,
 })
 
