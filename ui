@@ -256,15 +256,15 @@ function Hellish:CreateWindow(config)
     TopSection.Name = "TopSection"
     TopSection.Parent = SidebarClipper
     TopSection.BackgroundTransparency = 1
-    TopSection.Size = UDim2.new(1, 0, 0, 70)
+    TopSection.Size = UDim2.new(1, 0, 0, 75)
     
-    -- Brand Logo
+    -- Brand Logo (bigger)
     local BrandLogo = Instance.new("ImageLabel")
     BrandLogo.Name = "BrandLogo"
     BrandLogo.Parent = TopSection
     BrandLogo.BackgroundTransparency = 1
-    BrandLogo.Position = UDim2.new(0, 12, 0, 12)
-    BrandLogo.Size = UDim2.new(0, 38, 0, 38)
+    BrandLogo.Position = UDim2.new(0, 12, 0, 10)
+    BrandLogo.Size = UDim2.new(0, 45, 0, 45)
     BrandLogo.Image = "rbxassetid://109784990018884"
     BrandLogo.ScaleType = Enum.ScaleType.Fit
     
@@ -272,12 +272,12 @@ function Hellish:CreateWindow(config)
     BrandName.Name = "BrandName"
     BrandName.Parent = TopSection
     BrandName.BackgroundTransparency = 1
-    BrandName.Position = UDim2.new(0, 58, 0, 15)
-    BrandName.Size = UDim2.new(1, -65, 0, 18)
+    BrandName.Position = UDim2.new(0, 65, 0, 14)
+    BrandName.Size = UDim2.new(1, -75, 0, 20)
     BrandName.Font = Enum.Font.GothamBold
     BrandName.Text = WindowConfig.Name
     BrandName.TextColor3 = Color3.fromRGB(255, 200, 0)
-    BrandName.TextSize = 14
+    BrandName.TextSize = 15
     BrandName.TextXAlignment = Enum.TextXAlignment.Left
     
     local BrandGradient = Instance.new("UIGradient")
@@ -292,8 +292,8 @@ function Hellish:CreateWindow(config)
     GameTitle.Name = "GameTitle"
     GameTitle.Parent = TopSection
     GameTitle.BackgroundTransparency = 1
-    GameTitle.Position = UDim2.new(0, 15, 0, 35)
-    GameTitle.Size = UDim2.new(1, -30, 0, 14)
+    GameTitle.Position = UDim2.new(0, 65, 0, 40)
+    GameTitle.Size = UDim2.new(1, -75, 0, 14)
     GameTitle.Font = Enum.Font.Gotham
     GameTitle.TextColor3 = Color3.fromRGB(140, 120, 110)
     GameTitle.TextSize = 11
@@ -318,8 +318,8 @@ function Hellish:CreateWindow(config)
     NavContainer.Parent = SidebarClipper
     NavContainer.BackgroundTransparency = 1
     NavContainer.BorderSizePixel = 0
-    NavContainer.Position = UDim2.new(0, 0, 0, 70)
-    NavContainer.Size = UDim2.new(1, 0, 1, -70)
+    NavContainer.Position = UDim2.new(0, 0, 0, 75)
+    NavContainer.Size = UDim2.new(1, 0, 1, -75)
     NavContainer.ScrollBarThickness = 0
     NavContainer.CanvasSize = UDim2.new(0, 0, 0, 0)
     NavContainer.ScrollingEnabled = true
@@ -445,7 +445,7 @@ function Hellish:CreateWindow(config)
     IconLogo.BackgroundTransparency = 1
     IconLogo.Position = UDim2.new(0.5, 0, 0.5, 0)
     IconLogo.AnchorPoint = Vector2.new(0.5, 0.5)
-    IconLogo.Size = UDim2.new(0, 35, 0, 35)
+    IconLogo.Size = UDim2.new(0, 40, 0, 40)
     IconLogo.Image = "rbxassetid://109784990018884"
     IconLogo.ScaleType = Enum.ScaleType.Fit
     
