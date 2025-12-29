@@ -976,12 +976,22 @@ function Hellish:CreateWindow(config)
                     SliderCallback(value)
                 end
                 
+                local function startDragging(input)
+                    dragging = true
+                    local pos = (input.Position.X - SliderBack.AbsolutePosition.X) / SliderBack.AbsoluteSize.X
+                    local value = SliderMin + (SliderMax - SliderMin) * pos
+                    updateSlider(value)
+                end
+                
                 SliderBack.InputBegan:Connect(function(input)
                     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                        dragging = true
-                        local pos = (input.Position.X - SliderBack.AbsolutePosition.X) / SliderBack.AbsoluteSize.X
-                        local value = SliderMin + (SliderMax - SliderMin) * pos
-                        updateSlider(value)
+                        startDragging(input)
+                    end
+                end)
+                
+                SliderDot.InputBegan:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                        startDragging(input)
                     end
                 end)
                 
