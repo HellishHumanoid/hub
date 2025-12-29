@@ -4,7 +4,7 @@
     Compatible with all executors
     
     Usage:
-    local Hellish = loadstring(game:HttpGet("YOUR_GITHUB_RAW_LINK"))()
+    local Hellish = loadstring(game:HttpGet("https://raw.githubusercontent.com/HellishHumanoid/hub/refs/heads/main/ui"))()
     
     local Window = Hellish:CreateWindow({
         Name = "Hellish Hub",
@@ -255,14 +255,24 @@ function Hellish:CreateWindow(config)
     TopSection.Name = "TopSection"
     TopSection.Parent = SidebarClipper
     TopSection.BackgroundTransparency = 1
-    TopSection.Size = UDim2.new(1, 0, 0, 60)
+    TopSection.Size = UDim2.new(1, 0, 0, 70)
+    
+    -- Brand Logo
+    local BrandLogo = Instance.new("ImageLabel")
+    BrandLogo.Name = "BrandLogo"
+    BrandLogo.Parent = TopSection
+    BrandLogo.BackgroundTransparency = 1
+    BrandLogo.Position = UDim2.new(0, 12, 0, 12)
+    BrandLogo.Size = UDim2.new(0, 38, 0, 38)
+    BrandLogo.Image = "rbxassetid://84760901348186"
+    BrandLogo.ScaleType = Enum.ScaleType.Fit
     
     local BrandName = Instance.new("TextLabel")
     BrandName.Name = "BrandName"
     BrandName.Parent = TopSection
     BrandName.BackgroundTransparency = 1
-    BrandName.Position = UDim2.new(0, 15, 0, 12)
-    BrandName.Size = UDim2.new(1, -30, 0, 18)
+    BrandName.Position = UDim2.new(0, 58, 0, 15)
+    BrandName.Size = UDim2.new(1, -65, 0, 18)
     BrandName.Font = Enum.Font.GothamBold
     BrandName.Text = WindowConfig.Name
     BrandName.TextColor3 = Color3.fromRGB(255, 200, 0)
@@ -307,8 +317,8 @@ function Hellish:CreateWindow(config)
     NavContainer.Parent = SidebarClipper
     NavContainer.BackgroundTransparency = 1
     NavContainer.BorderSizePixel = 0
-    NavContainer.Position = UDim2.new(0, 0, 0, 60)
-    NavContainer.Size = UDim2.new(1, 0, 1, -60)
+    NavContainer.Position = UDim2.new(0, 0, 0, 70)
+    NavContainer.Size = UDim2.new(1, 0, 1, -70)
     NavContainer.ScrollBarThickness = 0
     NavContainer.CanvasSize = UDim2.new(0, 0, 0, 0)
     NavContainer.ScrollingEnabled = true
