@@ -4,7 +4,7 @@
     Compatible with all executors
     
     Usage:
-    local Hellish = loadstring(game:HttpGet("https://raw.githubusercontent.com/HellishHumanoid/hub/refs/heads/main/ui"))()
+    local Hellish = loadstring(game:HttpGet(https://raw.githubusercontent.com/HellishHumanoid/hub/refs/heads/main/ui"))()
     
     local Window = Hellish:CreateWindow({
         Name = "Hellish Hub",
@@ -404,7 +404,7 @@ function Hellish:CreateWindow(config)
     ContentPadding.Parent = ContentFrame
     ContentPadding.PaddingTop = UDim.new(0, 10)
     ContentPadding.PaddingBottom = UDim.new(0, 10)
-    ContentPadding.PaddingRight = UDim.new(0, 5)
+    ContentPadding.PaddingRight = UDim.new(0, 10)
     
     ContentLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
         ContentFrame.CanvasSize = UDim2.new(0, 0, 0, ContentLayout.AbsoluteContentSize.Y + 20)
@@ -856,9 +856,9 @@ function Hellish:CreateWindow(config)
                 ButtonCorner.Parent = Button
                 
                 Button.MouseButton1Click:Connect(function()
-                    CreateTween(ButtonGradient, {Rotation = 95}, 0.1)
+                    CreateTween(Button, {BackgroundColor3 = Color3.fromRGB(255, 200, 40)}, 0.1)
                     wait(0.1)
-                    CreateTween(ButtonGradient, {Rotation = 90}, 0.1)
+                    CreateTween(Button, {BackgroundColor3 = Color3.fromRGB(255, 180, 0)}, 0.1)
                     ButtonCallback()
                 end)
                 
@@ -1013,7 +1013,7 @@ function Hellish:CreateWindow(config)
                 DropdownFrame.Name = DropdownName .. "Dropdown"
                 DropdownFrame.Parent = Container
                 DropdownFrame.BackgroundTransparency = 1
-                DropdownFrame.Size = UDim2.new(1, 0, 0, 40)
+                DropdownFrame.Size = UDim2.new(1, 0, 0, 60)
                 DropdownFrame.ClipsDescendants = false
                 
                 local DropdownTitle = Instance.new("TextLabel")
@@ -1207,7 +1207,7 @@ function Hellish:CreateWindow(config)
                 MultiFrame.Name = MultiName .. "Multi"
                 MultiFrame.Parent = Container
                 MultiFrame.BackgroundTransparency = 1
-                MultiFrame.Size = UDim2.new(1, 0, 0, 40)
+                MultiFrame.Size = UDim2.new(1, 0, 0, 60)
                 MultiFrame.ClipsDescendants = false
                 
                 local MultiTitle = Instance.new("TextLabel")
@@ -1585,10 +1585,10 @@ function Hellish:CreateWindow(config)
                 UserInputService.InputBegan:Connect(function(input, gameProcessed)
                     if listening and input.UserInputType == Enum.UserInputType.Keyboard then
                         currentKey = input.KeyCode
-                        KeybindButton.Text = currentKey.Name
+                        KeybindButton.Text = input.KeyCode.Name
                         listening = false
                         CreateTween(ButtonStroke, {Color = Color3.fromRGB(50, 35, 25)}, 0.15)
-                        ConfigLibrary.CurrentConfig[KeybindName] = currentKey.Name
+                        ConfigLibrary.CurrentConfig[KeybindName] = input.KeyCode.Name
                     elseif not gameProcessed and input.KeyCode == currentKey then
                         KeybindCallback(currentKey)
                     end
