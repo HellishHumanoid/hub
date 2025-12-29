@@ -1,4 +1,4 @@
-local Hellish = loadstring(game:HttpGet("https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/Hellish.lua"))()
+local Hellish = loadstring(game:HttpGet("https://raw.githubusercontent.com/HellishHumanoid/hub/refs/heads/main/ui"))()
 
 local Window = Hellish:CreateWindow({
    Name = "Hellish's Arcane Lineage",
