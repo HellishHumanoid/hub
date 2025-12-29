@@ -4,7 +4,7 @@
     Compatible with all executors
     
     Usage:
-    local Hellish = loadstring(game:HttpGet(https://raw.githubusercontent.com/HellishHumanoid/hub/refs/heads/main/ui"))()
+    local Hellish = loadstring(game:HttpGet("https://raw.githubusercontent.com/HellishHumanoid/hub/refs/heads/main/ui"))()
     
     local Window = Hellish:CreateWindow({
         Name = "Hellish Hub",
@@ -832,16 +832,12 @@ function Hellish:CreateWindow(config)
                 local ButtonName = buttonConfig.Name or "Button"
                 local ButtonCallback = buttonConfig.Callback or function() end
                 
-                local Button = Instance.new("TextButton")
-                Button.Name = ButtonName .. "Button"
-                Button.Parent = Container
-                Button.BackgroundColor3 = Color3.fromRGB(255, 180, 0)
-                Button.BorderSizePixel = 0
-                Button.Size = UDim2.new(1, 0, 0, 36)
-                Button.Font = Enum.Font.GothamBold
-                Button.Text = ButtonName
-                Button.TextColor3 = Color3.fromRGB(255, 255, 255)
-                Button.TextSize = 13
+                local ButtonFrame = Instance.new("Frame")
+                ButtonFrame.Name = ButtonName .. "ButtonFrame"
+                ButtonFrame.Parent = Container
+                ButtonFrame.BackgroundColor3 = Color3.fromRGB(255, 180, 0)
+                ButtonFrame.BorderSizePixel = 0
+                ButtonFrame.Size = UDim2.new(1, 0, 0, 36)
                 
                 local ButtonGradient = Instance.new("UIGradient")
                 ButtonGradient.Color = ColorSequence.new{
@@ -849,25 +845,35 @@ function Hellish:CreateWindow(config)
                     ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 120, 0))
                 }
                 ButtonGradient.Rotation = 90
-                ButtonGradient.Parent = Button
+                ButtonGradient.Parent = ButtonFrame
                 
                 local ButtonCorner = Instance.new("UICorner")
                 ButtonCorner.CornerRadius = UDim.new(0, 4)
-                ButtonCorner.Parent = Button
+                ButtonCorner.Parent = ButtonFrame
+                
+                local Button = Instance.new("TextButton")
+                Button.Name = ButtonName .. "Button"
+                Button.Parent = ButtonFrame
+                Button.BackgroundTransparency = 1
+                Button.Size = UDim2.new(1, 0, 1, 0)
+                Button.Font = Enum.Font.GothamBold
+                Button.Text = ButtonName
+                Button.TextColor3 = Color3.fromRGB(255, 255, 255)
+                Button.TextSize = 13
                 
                 Button.MouseButton1Click:Connect(function()
-                    CreateTween(Button, {BackgroundColor3 = Color3.fromRGB(255, 200, 40)}, 0.1)
+                    CreateTween(ButtonFrame, {BackgroundColor3 = Color3.fromRGB(255, 200, 40)}, 0.1)
                     wait(0.1)
-                    CreateTween(Button, {BackgroundColor3 = Color3.fromRGB(255, 180, 0)}, 0.1)
+                    CreateTween(ButtonFrame, {BackgroundColor3 = Color3.fromRGB(255, 180, 0)}, 0.1)
                     ButtonCallback()
                 end)
                 
                 Button.MouseEnter:Connect(function()
-                    CreateTween(Button, {BackgroundColor3 = Color3.fromRGB(255, 200, 40)}, 0.15)
+                    CreateTween(ButtonFrame, {BackgroundColor3 = Color3.fromRGB(255, 200, 40)}, 0.15)
                 end)
                 
                 Button.MouseLeave:Connect(function()
-                    CreateTween(Button, {BackgroundColor3 = Color3.fromRGB(255, 180, 0)}, 0.15)
+                    CreateTween(ButtonFrame, {BackgroundColor3 = Color3.fromRGB(255, 180, 0)}, 0.15)
                 end)
             end
             
@@ -1589,7 +1595,7 @@ function Hellish:CreateWindow(config)
                         listening = false
                         CreateTween(ButtonStroke, {Color = Color3.fromRGB(50, 35, 25)}, 0.15)
                         ConfigLibrary.CurrentConfig[KeybindName] = input.KeyCode.Name
-                    elseif not gameProcessed and input.KeyCode == currentKey then
+                    elseif not gameProcessed and not listening and input.KeyCode == currentKey and input.UserInputType == Enum.UserInputType.Keyboard then
                         KeybindCallback(currentKey)
                     end
                 end)
