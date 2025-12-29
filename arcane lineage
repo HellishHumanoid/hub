@@ -5,12 +5,12 @@ local Window = Hellish:CreateWindow({
    ConfigurationSaving = {
       Enabled = true,
       FolderName = "HellishArcane",
-      FileName = "HellishShi"
+      FileName = "AutoScript"
    }
 })
 
 -- ============================================
--- MAIN SECTION
+-- AUTO-DODGE SECTION
 -- ============================================
 local DodgeTab = Window:CreateTab("Main")
 local DodgeSection = DodgeTab:CreateSection("Main Settings")
@@ -232,19 +232,58 @@ function autoLevelUpLoop()
             while AutoLevelUpEnabled and (tick() - waitStart) < waitTime do
                 task.wait(1)
             end
-            continue
-        end
-        
-        local originalPosition = player.Character.HumanoidRootPart.CFrame
+        else
+            -- Character exists, proceed with level up
+            local originalPosition = player.Character.HumanoidRootPart.CFrame
         
         local promptTriggered = false
         local startTime = tick()
         local duration = 2
         
+        -- Find the ??? NPC and lock camera
+        local npcModel = nil
+        local npcPosition = Vector3.new(790, 235, 2117)
+        
+        pcall(function()
+            local living = workspace:FindFirstChild("Living")
+            if living then
+                for _, npc in pairs(living:GetChildren()) do
+                    if npc:IsA("Model") and npc.Name == "???" then
+                        local npcRoot = npc:FindFirstChild("HumanoidRootPart") or npc:FindFirstChild("Head")
+                        if npcRoot then
+                            npcModel = npc
+                            npcPosition = npcRoot.Position
+                        end
+                        break
+                    end
+                end
+            end
+        end)
+        
+        -- Lock camera to NPC before teleporting
+        if npcModel then
+            local camera = workspace.CurrentCamera
+            camera.CameraType = Enum.CameraType.Scriptable
+            
+            local npcHead = npcModel:FindFirstChild("Head") or npcModel:FindFirstChild("HumanoidRootPart")
+            if npcHead then
+                camera.CFrame = CFrame.new(npcPosition + Vector3.new(0, 2, 5), npcHead.Position)
+            end
+        end
+        
         while not promptTriggered and (tick() - startTime) < duration do
             for i = 1, 3 do
                 if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                    player.Character.HumanoidRootPart.CFrame = CFrame.new(790, 235, 2117)
+                    player.Character.HumanoidRootPart.CFrame = CFrame.new(npcPosition)
+                end
+                
+                -- Keep camera locked on NPC
+                if npcModel then
+                    local camera = workspace.CurrentCamera
+                    local npcHead = npcModel:FindFirstChild("Head") or npcModel:FindFirstChild("HumanoidRootPart")
+                    if npcHead then
+                        camera.CFrame = CFrame.new(npcPosition + Vector3.new(0, 2, 5), npcHead.Position)
+                    end
                 end
                 
                 task.wait(0.01)
@@ -263,9 +302,7 @@ function autoLevelUpLoop()
         end
         
         if promptTriggered then
-            task.wait(1)
-            player.Character.HumanoidRootPart.CFrame = originalPosition
-            
+            -- Keep camera locked during dialogue interaction
             local dialogue = player.PlayerGui:WaitForChild("NPCDialogue")
             local bg = dialogue:WaitForChild("BG")
             local options = bg:WaitForChild("Options")
@@ -285,10 +322,44 @@ function autoLevelUpLoop()
                 task.wait(0.05)
                 VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
                 
-                task.wait(8)
+                -- Disable navigation after finishing dialogue
+                task.wait(0.5)
+                GuiService.GuiNavigationEnabled = false
+                GuiService.SelectedObject = nil
+            end
+            
+            -- Unlock camera now that dialogue is done
+            workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
+            
+            task.wait(0.5)
+            player.Character.HumanoidRootPart.CFrame = originalPosition
+                
+                -- Wait 6 seconds for LevelUp GUI
+                task.wait(6)
                 
                 local levelUp = player.PlayerGui:FindFirstChild("LevelUp")
-                if levelUp and levelUp:FindFirstChild("Container") then
+                
+                -- Check if LevelUp GUI exists and is enabled
+                if not levelUp or not levelUp.Enabled or not levelUp:FindFirstChild("Container") then
+                    print("LevelUp GUI not found or not enabled, skipping level up")
+                    
+                    if AutoAttackUserEnabled then
+                        _G.AutoAttackEnabled = true
+                    end
+                    
+                    isLevelingUp = false
+                    
+                    local waitTime = 300
+                    local waitStart = tick()
+                    while AutoLevelUpEnabled and (tick() - waitStart) < waitTime do
+                        task.wait(1)
+                    end
+                else
+                    -- LevelUp GUI found and enabled, re-enable navigation
+                    print("LevelUp GUI found, enabling navigation")
+                    GuiService.GuiNavigationEnabled = true
+                    
+                    if levelUp and levelUp:FindFirstChild("Container") then
                     local buttons = levelUp.Container.Body.Buttons
                     
                     -- Map of stat names to their buttons
@@ -336,6 +407,7 @@ function autoLevelUpLoop()
                 end
             end
         end
+        end -- Close the else block (from character check)
         
         if AutoAttackUserEnabled then
             _G.AutoAttackEnabled = true
