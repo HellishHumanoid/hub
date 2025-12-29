@@ -650,7 +650,6 @@ function Hellish:CreateWindow(config)
         
         -- Select first tab by default
         if #Window.Tabs == 1 then
-            task.wait(0.15)
             TabButton.MouseButton1Click:Fire()
         end
         
