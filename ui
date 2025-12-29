@@ -772,15 +772,14 @@ function Hellish:CreateWindow(config)
                 }
                 StrokeGradient.Parent = CheckboxStroke
                 
-                local Checkmark = Instance.new("TextLabel")
-                Checkmark.Parent = Checkbox
-                Checkmark.BackgroundTransparency = 1
-                Checkmark.Size = UDim2.new(1, 0, 1, 0)
-                Checkmark.Font = Enum.Font.GothamBold
-                Checkmark.Text = "✓"
-                Checkmark.TextColor3 = Color3.fromRGB(255, 200, 100)
-                Checkmark.TextSize = 14
-                Checkmark.Visible = ToggleDefault
+                local CheckboxGradient = Instance.new("UIGradient")
+                CheckboxGradient.Color = ColorSequence.new{
+                    ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 220, 100)),
+                    ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 140, 0))
+                }
+                CheckboxGradient.Rotation = 90
+                CheckboxGradient.Parent = Checkbox
+                CheckboxGradient.Enabled = ToggleDefault
                 
                 local ToggleButton = Instance.new("TextButton")
                 ToggleButton.Parent = ToggleFrame
@@ -792,12 +791,12 @@ function Hellish:CreateWindow(config)
                 
                 ToggleButton.MouseButton1Click:Connect(function()
                     toggled = not toggled
-                    Checkmark.Visible = toggled
+                    CheckboxGradient.Enabled = toggled
                     
                     if toggled then
-                        CreateTween(Checkbox, {BackgroundColor3 = Color3.fromRGB(30, 20, 15)}, 0.15)
+                        Checkbox.BackgroundColor3 = Color3.fromRGB(255, 180, 0)
                     else
-                        CreateTween(Checkbox, {BackgroundColor3 = Color3.fromRGB(20, 15, 12)}, 0.15)
+                        Checkbox.BackgroundColor3 = Color3.fromRGB(20, 15, 12)
                     end
                     
                     ConfigLibrary.CurrentConfig[ToggleName] = toggled
@@ -817,9 +816,9 @@ function Hellish:CreateWindow(config)
                 return {
                     SetValue = function(value)
                         toggled = value
-                        Checkmark.Visible = value
+                        CheckboxGradient.Enabled = value
                         if value then
-                            Checkbox.BackgroundColor3 = Color3.fromRGB(30, 20, 15)
+                            Checkbox.BackgroundColor3 = Color3.fromRGB(255, 180, 0)
                         else
                             Checkbox.BackgroundColor3 = Color3.fromRGB(20, 15, 12)
                         end
