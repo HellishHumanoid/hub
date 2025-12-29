@@ -402,7 +402,7 @@ function Hellish:CreateWindow(config)
     
     local ContentPadding = Instance.new("UIPadding")
     ContentPadding.Parent = ContentFrame
-    ContentPadding.PaddingTop = UDim.new(0, 10)
+    ContentPadding.PaddingTop = UDim.new(0, 15)
     ContentPadding.PaddingBottom = UDim.new(0, 10)
     ContentPadding.PaddingRight = UDim.new(0, 10)
     
