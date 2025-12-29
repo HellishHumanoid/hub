@@ -354,8 +354,18 @@ function Hellish:CreateWindow(config)
     local TopBar = Instance.new("Frame")
     TopBar.Name = "TopBar"
     TopBar.Parent = ContentContainer
-    TopBar.BackgroundTransparency = 1
+    TopBar.BackgroundColor3 = Color3.fromRGB(10, 8, 8)
+    TopBar.BorderSizePixel = 0
     TopBar.Size = UDim2.new(1, 0, 0, 50)
+    TopBar.ZIndex = 5
+    
+    local TopBarGradient = Instance.new("UIGradient")
+    TopBarGradient.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(25, 15, 10)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(10, 8, 8))
+    }
+    TopBarGradient.Rotation = 135
+    TopBarGradient.Parent = TopBar
     
     local TabTitle = Instance.new("TextLabel")
     TabTitle.Name = "TabTitle"
@@ -369,6 +379,7 @@ function Hellish:CreateWindow(config)
     TabTitle.TextSize = 18
     TabTitle.TextXAlignment = Enum.TextXAlignment.Left
     TabTitle.TextYAlignment = Enum.TextYAlignment.Center
+    TabTitle.ZIndex = 6
     
     local CloseButton = Instance.new("TextButton")
     CloseButton.Name = "CloseButton"
@@ -381,6 +392,7 @@ function Hellish:CreateWindow(config)
     CloseButton.Text = "X"
     CloseButton.TextColor3 = Color3.fromRGB(180, 160, 150)
     CloseButton.TextSize = 16
+    CloseButton.ZIndex = 6
     
     -- Content Frame
     local ContentFrame = Instance.new("ScrollingFrame")
