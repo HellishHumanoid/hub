@@ -1,36 +1,29 @@
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+local Hellish = loadstring(game:HttpGet("https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/Hellish.lua"))()
 
-local Window = Rayfield:CreateWindow({
+local Window = Hellish:CreateWindow({
    Name = "Hellish's Arcane Lineage",
-   LoadingTitle = "Idk",
-   LoadingSubtitle = "by Hellish",
    ConfigurationSaving = {
       Enabled = true,
-      FolderName = nil,
+      FolderName = "HellishArcane",
       FileName = "AutoScript"
-   },
-   Discord = {
-      Enabled = false,
-      Invite = "noinvitelink",
-      RememberJoins = true
-   },
-   KeySystem = false,
+   }
 })
 
 -- ============================================
 -- AUTO-DODGE SECTION
 -- ============================================
-local DodgeTab = Window:CreateTab("Auto-Dodge", 4483362458)
+local DodgeTab = Window:CreateTab("Auto-Dodge")
+local DodgeSection = DodgeTab:CreateSection("Dodge Settings")
 
 local AutoDodgeEnabled = false
 local YellowDodgeDelay = 0
 local RedDodgeDelay = 0
 local EarlyOffset = 2
 
-local DodgeToggle = DodgeTab:CreateToggle({
+DodgeSection:CreateToggle({
    Name = "Auto-Dodge",
-   CurrentValue = false,
-   Flag = "AutoDodgeToggle",
+   Description = "Automatically dodge attacks",
+   Default = false,
    Callback = function(Value)
       AutoDodgeEnabled = Value
    end,
@@ -164,11 +157,12 @@ end)
 -- ============================================
 local AutoLevelUpEnabled = false
 local isLevelingUp = false
+local SelectedStats = {}
 
-local AutoLevelUpToggle = DodgeTab:CreateToggle({
-   Name = "Auto-Level Up [STRENGTH & HP]",
-   CurrentValue = false,
-   Flag = "AutoLevelUpToggle",
+DodgeSection:CreateToggle({
+   Name = "Auto-Level Up",
+   Description = "Automatically level up selected stats",
+   Default = false,
    Callback = function(Value)
       AutoLevelUpEnabled = Value
       if Value then
@@ -176,6 +170,15 @@ local AutoLevelUpToggle = DodgeTab:CreateToggle({
       else
          isLevelingUp = false
       end
+   end,
+})
+
+DodgeSection:CreateMultiDropdown({
+   Name = "Select Stats to Level",
+   Options = {"Strength", "Endurance", "Arcane", "Speed", "Luck"},
+   Callback = function(Values)
+      SelectedStats = Values
+      print("Selected Stats:", table.concat(Values, ", "))
    end,
 })
 
@@ -286,31 +289,35 @@ function autoLevelUpLoop()
                 
                 local levelUp = player.PlayerGui:FindFirstChild("LevelUp")
                 if levelUp and levelUp:FindFirstChild("Container") then
-                    local strengthButton = levelUp.Container.Body.Buttons.Strength.Frame.StrengthUp
-                    local enduranceButton = levelUp.Container.Body.Buttons.Endurance.Frame.EnduranceUp
+                    local buttons = levelUp.Container.Body.Buttons
+                    
+                    -- Map of stat names to their buttons
+                    local statButtons = {
+                        Strength = buttons.Strength.Frame.StrengthUp,
+                        Endurance = buttons.Endurance.Frame.EnduranceUp,
+                        Arcane = buttons.Arcane.Frame.ArcaneUp,
+                        Speed = buttons.Speed.Frame.SpeedUp,
+                        Luck = buttons.Luck.Frame.LuckUp
+                    }
+                    
+                    -- Level up each selected stat 5 times
+                    for _, statName in pairs(SelectedStats) do
+                        local statButton = statButtons[statName]
+                        if statButton then
+                            for i = 1, 5 do
+                                GuiService.SelectedObject = statButton
+                                task.wait(0.2)
+                                
+                                VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+                                task.wait(0.02)
+                                VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+                                
+                                task.wait(0.2)
+                            end
+                        end
+                    end
+                    
                     local finishButton = levelUp.Finish
-                    
-                    for i = 1, 5 do
-                        GuiService.SelectedObject = strengthButton
-                        task.wait(0.2)
-                        
-                        VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
-                        task.wait(0.02)
-                        VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
-                        
-                        task.wait(0.2)
-                    end
-                    
-                    for i = 1, 5 do
-                        GuiService.SelectedObject = enduranceButton
-                        task.wait(0.2)
-                        
-                        VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
-                        task.wait(0.02)
-                        VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
-                        
-                        task.wait(0.2)
-                    end
                     
                     task.wait(0.3)
                     GuiService.SelectedObject = finishButton
@@ -356,28 +363,27 @@ _G.AutoAttackEnabled = false
 local SelectedSkill = "Strike"
 _G.AutoAttackUserEnabled = false
 
-local AttackToggle = DodgeTab:CreateToggle({
+local AttackSection = DodgeTab:CreateSection("Attack Settings")
+
+AttackSection:CreateToggle({
    Name = "Auto-Attack",
-   CurrentValue = false,
-   Flag = "AutoAttackToggle",
+   Description = "Automatically attack enemies",
+   Default = false,
    Callback = function(Value)
       _G.AutoAttackUserEnabled = Value
       _G.AutoAttackEnabled = Value
    end,
 })
 
-local SkillDropdown = DodgeTab:CreateDropdown({
+AttackSection:CreateDropdown({
    Name = "Select Skill",
    Options = {"Strike"},
-   CurrentOption = {"Strike"},
-   MultipleOptions = false,
-   Flag = "SkillDropdown",
-   Callback = function(Option)
-      SelectedSkill = Option[1]
+   Callback = function(Value)
+      SelectedSkill = Value
    end,
 })
 
-local RefreshButton = DodgeTab:CreateButton({
+AttackSection:CreateButton({
    Name = "Refresh Skills",
    Callback = function()
       local player = game:GetService("Players").LocalPlayer
@@ -395,13 +401,15 @@ local RefreshButton = DodgeTab:CreateButton({
       end)
       
       if success and #skills > 0 then
-         SkillDropdown:Refresh(skills, true)
+         print("Skills refreshed:", table.concat(skills, ", "))
          SelectedSkill = skills[1]
       end
    end,
 })
 
-local TeleportButton = DodgeTab:CreateButton({
+local UtilitySection = DodgeTab:CreateSection("Utility")
+
+UtilitySection:CreateButton({
    Name = "Teleport to ???",
    Callback = function()
       local player = game:GetService("Players").LocalPlayer
@@ -415,13 +423,12 @@ local TeleportButton = DodgeTab:CreateButton({
    end,
 })
 
-local ResetButton = DodgeTab:CreateButton({
+UtilitySection:CreateButton({
    Name = "Reset",
    Callback = function()
       local player = game:GetService("Players").LocalPlayer
       local TeleportService = game:GetService("TeleportService")
       
-      -- Set HP to 0
       if player.Character then
          local humanoid = player.Character:FindFirstChild("Humanoid")
          if humanoid then
@@ -429,10 +436,8 @@ local ResetButton = DodgeTab:CreateButton({
          end
       end
       
-      -- Wait 0.5 seconds
       task.wait(0.5)
       
-      -- Rejoin the same server
       TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, player)
    end,
 })
@@ -585,7 +590,8 @@ end)
 -- ============================================
 -- AUTO-ITEM SECTION
 -- ============================================
-local FarmTab = Window:CreateTab("Items", 4483362458)
+local FarmTab = Window:CreateTab("Items")
+local ItemSection = FarmTab:CreateSection("Item Collection")
 
 local AutoItemEnabled = false
 local ItemSettings = {
@@ -688,10 +694,10 @@ local function autoCollectItems()
     setNoclip(false)
 end
 
-local AutoItemToggle = FarmTab:CreateToggle({
+ItemSection:CreateToggle({
     Name = "Teleport to Item",
-    CurrentValue = false,
-    Flag = "AutoItemToggle",
+    Description = "Automatically teleport to selected items",
+    Default = false,
     Callback = function(Value)
         AutoItemEnabled = Value
         if Value then
@@ -702,64 +708,59 @@ local AutoItemToggle = FarmTab:CreateToggle({
     end,
 })
 
-local EverthistleToggle = FarmTab:CreateToggle({
+local ItemTypesSection = FarmTab:CreateSection("Item Types")
+
+ItemTypesSection:CreateToggle({
     Name = "Teleport to Everthistle",
-    CurrentValue = false,
-    Flag = "EverthistleToggle",
+    Default = false,
     Callback = function(Value)
         ItemSettings.Everthistle = Value
     end,
 })
 
-local HightailToggle = FarmTab:CreateToggle({
+ItemTypesSection:CreateToggle({
     Name = "Teleport to Hightail",
-    CurrentValue = false,
-    Flag = "HightailToggle",
+    Default = false,
     Callback = function(Value)
         ItemSettings.Hightail = Value
     end,
 })
 
-local CarnastoolToggle = FarmTab:CreateToggle({
+ItemTypesSection:CreateToggle({
     Name = "Teleport to Carnastool",
-    CurrentValue = false,
-    Flag = "CarnastoolToggle",
+    Default = false,
     Callback = function(Value)
         ItemSettings.Carnastool = Value
     end,
 })
 
-local CrylightToggle = FarmTab:CreateToggle({
+ItemTypesSection:CreateToggle({
     Name = "Teleport to Crylight",
-    CurrentValue = false,
-    Flag = "CrylightToggle",
+    Default = false,
     Callback = function(Value)
         ItemSettings.Crylight = Value
     end,
 })
 
-local CryastemToggle = FarmTab:CreateToggle({
+ItemTypesSection:CreateToggle({
     Name = "Teleport to Cryastem",
-    CurrentValue = false,
-    Flag = "CryastemToggle",
+    Default = false,
     Callback = function(Value)
         ItemSettings.Cryastem = Value
     end,
 })
 
-local DriprootToggle = FarmTab:CreateToggle({
+ItemTypesSection:CreateToggle({
     Name = "Teleport to Driproot",
-    CurrentValue = false,
-    Flag = "DriprootToggle",
+    Default = false,
     Callback = function(Value)
         ItemSettings.Driproot = Value
     end,
 })
 
-local SevenLeafToggle = FarmTab:CreateToggle({
+ItemTypesSection:CreateToggle({
     Name = "Teleport to 7 Leafed Everthistle",
-    CurrentValue = false,
-    Flag = "SevenLeafToggle",
+    Default = false,
     Callback = function(Value)
         ItemSettings["7 Leafed Everthistle"] = Value
     end,
@@ -774,4 +775,18 @@ task.spawn(function()
     end
 end)
 
-Rayfield:LoadConfiguration()
+-- ============================================
+-- MISC TAB
+-- ============================================
+local MiscTab = Window:CreateTab("Misc")
+local MiscSection = MiscTab:CreateSection("Settings")
+
+MiscSection:CreateKeybind({
+    Name = "Toggle UI",
+    Default = Enum.KeyCode.RightShift,
+    Callback = function(Key)
+        print("UI Toggle Key Pressed:", Key.Name)
+    end
+})
+
+print("🔥 Hellish's Arcane Lineage Loaded Successfully!")
