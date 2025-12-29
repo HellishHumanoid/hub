@@ -1022,7 +1022,7 @@ function Hellish:CreateWindow(config)
             function Section:CreateDropdown(dropdownConfig)
                 local DropdownName = dropdownConfig.Name or "Dropdown"
                 local DropdownOptions = dropdownConfig.Options or {"Option 1", "Option 2"}
-                local DropdownDefault = dropdownConfig.Default or 1
+                local DropdownDefault = dropdownConfig.Default or nil
                 local DropdownCallback = dropdownConfig.Callback or function() end
                 
                 local DropdownFrame = Instance.new("Frame")
@@ -1069,7 +1069,7 @@ function Hellish:CreateWindow(config)
                 SelectedText.Position = UDim2.new(0, 12, 0, 0)
                 SelectedText.Size = UDim2.new(1, -35, 1, 0)
                 SelectedText.Font = Enum.Font.Gotham
-                SelectedText.Text = DropdownOptions[DropdownDefault]
+                SelectedText.Text = DropdownDefault and DropdownOptions[DropdownDefault] or "None"
                 SelectedText.TextColor3 = Color3.fromRGB(200, 180, 170)
                 SelectedText.TextSize = 12
                 SelectedText.TextXAlignment = Enum.TextXAlignment.Left
@@ -1119,7 +1119,7 @@ function Hellish:CreateWindow(config)
                 ListPadding.PaddingRight = UDim.new(0, 5)
                 
                 local isOpen = false
-                local selectedIndex = DropdownDefault
+                local selectedIndex = DropdownDefault or nil
                 
                 for i, option in ipairs(DropdownOptions) do
                     local OptionButton = Instance.new("TextButton")
@@ -1191,7 +1191,7 @@ function Hellish:CreateWindow(config)
                     CreateTween(ButtonStroke, {Color = Color3.fromRGB(50, 35, 25)}, 0.15)
                 end)
                 
-                ConfigLibrary.CurrentConfig[DropdownName] = DropdownOptions[DropdownDefault]
+                ConfigLibrary.CurrentConfig[DropdownName] = DropdownDefault and DropdownOptions[DropdownDefault] or nil
                 
                 return {
                     SetValue = function(value)
