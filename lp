@@ -66,6 +66,12 @@ local AutoBossHopToggle = BossHopBox:AddToggle("AutoBossHop", {
     Default = false,
 })
 
+local BossHopDropdown = BossHopBox:AddDropdown("BossHopSelect", {
+    Values  = { "Red Haired Emperor", "Sea Beast" },
+    Default = 1,
+    Text    = "Boss",
+})
+
 local FarmModeDropdown = FarmBox:AddDropdown("FarmMode", {
     Values = {
         "Lv. 0-25",    "Lv. 25-50",   "Lv. 50-75",   "Lv. 75-100",
@@ -801,19 +807,26 @@ local function bossLoop()
                 continue
             end
 
-            -- Phase 1: kill Guardians until orb drops
+            -- Phase 1: keep killing Guardians until orb count increases
             local orbsBefore = getOrbCount()
-            Library:Notify("Sea Beast: farming Guardian for orb...")
+            Library:Notify("Sea Beast: farming Guardian for orb... (" .. orbsBefore .. " orbs)")
             pcall(equipWeapon)
             teleport(guardianCfg.coords.X, guardianCfg.coords.Y, guardianCfg.coords.Z)
             task.wait(1.5)
 
-            lockAndKill(function()
-                if getOrbCount() > orbsBefore then return nil end
-                if BossDropdown.Value ~= "Sea Beast" then return nil end
-                local ok, folder = pcall(function() return workspace.Holder.Mobs[guardianCfg.folder] end)
-                return ok and folder and folder:FindFirstChild(guardianCfg.mobName)
-            end)
+            while AutoBossToggle.Value and BossDropdown.Value == "Sea Beast" and getOrbCount() <= orbsBefore do
+                lockAndKill(function()
+                    if BossDropdown.Value ~= "Sea Beast" then return nil end
+                    local ok, folder = pcall(function() return workspace.Holder.Mobs[guardianCfg.folder] end)
+                    return ok and folder and folder:FindFirstChild(guardianCfg.mobName)
+                end)
+                -- Guardian died but orb didn't drop yet — wait for respawn and try again
+                if getOrbCount() <= orbsBefore then
+                    task.wait(3)
+                    teleport(guardianCfg.coords.X, guardianCfg.coords.Y, guardianCfg.coords.Z)
+                    task.wait(1)
+                end
+            end
 
             if not AutoBossToggle.Value or BossDropdown.Value ~= "Sea Beast" then break end
 
@@ -962,66 +975,78 @@ end
 
 local bossHopActive = false
 
-local function bossHopLoop()
-    waitForGameLoad()
-
-    while AutoBossHopToggle.Value do
-        local cfg = BossConfig[BossDropdown.Value]
-        if not cfg then task.wait(1) continue end
-
-        pcall(equipWeapon)
-        teleport(cfg.coords.X, cfg.coords.Y, cfg.coords.Z)
-        task.wait(3) -- give time for boss to appear
-
-        local boss = getBoss()
-        if not boss or not isAlive(boss) then
-            Library:Notify("Boss not found — server hopping...")
-            queueReexecute()
-            task.wait(0.5)
-            serverHop()
-            task.wait(15) -- wait for teleport
-            continue
-        end
-
-        Library:Notify("Boss found! Killing " .. cfg.mobName)
-
-        -- Lock on and kill boss fully
-        local pos  = PositionDropdown.Value
-        local char = LocalPlayer.Character
-        local hum  = char and char:FindFirstChildOfClass("Humanoid")
-        if hum and (pos == "Below" or pos == "Above") then
-            hum.AutoRotate = false
-        end
-
-        local velConn = game:GetService("RunService").Heartbeat:Connect(function()
-            local hrp2 = getHRP()
-            if hrp2 then
-                hrp2.AssemblyLinearVelocity  = Vector3.zero
-                hrp2.AssemblyAngularVelocity = Vector3.zero
-            end
-        end)
-
-        while AutoBossHopToggle.Value and boss and isAlive(boss) do
-            local bossHRP = boss:FindFirstChild("HumanoidRootPart")
-            local hrp2 = getHRP()
-            if hrp2 and bossHRP then
-                hrp2.CFrame = getTargetCFrame(bossHRP)
-            end
-            task.wait()
-        end
-
-        velConn:Disconnect()
-        if hum then hum.AutoRotate = true end
-
-        if not AutoBossHopToggle.Value then break end
-
-        -- Boss killed, hop to next server for another attempt
-        Library:Notify("Boss killed! Server hopping...")
-        task.wait(1)
+local function hopKillAndHop(getMobFn, name)
+    local mob = getMobFn()
+    if not mob or not isAlive(mob) then
+        Library:Notify(name .. " not found — hopping...")
         queueReexecute()
         task.wait(0.5)
         serverHop()
         task.wait(15)
+        return
+    end
+
+    Library:Notify(name .. " found! Killing...")
+
+    local pos = PositionDropdown.Value
+    local char = LocalPlayer.Character
+    local hum  = char and char:FindFirstChildOfClass("Humanoid")
+    if hum and (pos == "Below" or pos == "Above") then hum.AutoRotate = false end
+
+    local velConn = game:GetService("RunService").Heartbeat:Connect(function()
+        local h = getHRP()
+        if h then
+            h.AssemblyLinearVelocity  = Vector3.zero
+            h.AssemblyAngularVelocity = Vector3.zero
+        end
+    end)
+
+    while AutoBossHopToggle.Value do
+        local target = getMobFn()
+        if not target or not isAlive(target) then break end
+        local mobHRP = target:FindFirstChild("HumanoidRootPart")
+        local h = getHRP()
+        if h and mobHRP then h.CFrame = getTargetCFrame(mobHRP) end
+        task.wait()
+    end
+
+    velConn:Disconnect()
+    if hum then hum.AutoRotate = true end
+    if not AutoBossHopToggle.Value then return end
+
+    Library:Notify(name .. " killed! Hopping...")
+    task.wait(1)
+    queueReexecute()
+    task.wait(0.5)
+    serverHop()
+    task.wait(15)
+end
+
+local function bossHopLoop()
+    waitForGameLoad()
+
+    while AutoBossHopToggle.Value do
+        pcall(equipWeapon)
+        local selection = BossHopDropdown.Value
+
+        if selection == "Red Haired Emperor" then
+            local cfg = BossConfig["Red Haired Emperor"]
+            teleport(cfg.coords.X, cfg.coords.Y, cfg.coords.Z)
+            task.wait(3)
+            hopKillAndHop(function()
+                local ok, folder = pcall(function() return workspace.Holder.Mobs[cfg.folder] end)
+                return ok and folder and folder:FindFirstChild(cfg.mobName)
+            end, "Red Haired Emperor")
+
+        elseif selection == "Sea Beast" then
+            local guardianCoords = BossConfig["Guardian of The Seas"].coords
+            teleport(guardianCoords.X, guardianCoords.Y, guardianCoords.Z)
+            task.wait(3)
+            hopKillAndHop(function()
+                local ok, mob = pcall(function() return workspace.Holder.Mobs["Sea Beast Island"]["Sea Beast"] end)
+                return ok and mob or nil
+            end, "Sea Beast")
+        end
     end
 end
 
