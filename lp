@@ -1,0 +1,865 @@
+-- Services
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+
+-- Load Linoria
+local repo = "https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/"
+local Library      = loadstring(game:HttpGet(repo .. "Library.lua"))()
+local ThemeManager = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
+local SaveManager  = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
+
+-- Window
+local Window = Library:CreateWindow({
+    Title    = "Legend Piece",
+    Center   = true,
+    AutoShow = true,
+})
+
+local Tabs = {
+    Farm         = Window:AddTab("Farm"),
+    FarmSettings = Window:AddTab("Farm Settings"),
+}
+
+-- ──────────────────────────────────────────────
+-- Farm Tab — Left
+-- ──────────────────────────────────────────────
+
+local FarmBox = Tabs.Farm:AddLeftGroupbox("Farm")
+
+local AutoLevelToggle = FarmBox:AddToggle("AutoLevel", {
+    Text    = "Auto-Level",
+    Default = false,
+})
+
+local AutoQuestToggle = FarmBox:AddToggle("AutoQuest", {
+    Text    = "Auto-Quest",
+    Default = false,
+})
+
+
+local BossBox = Tabs.Farm:AddLeftGroupbox("Auto Boss")
+
+local AutoBossToggle = BossBox:AddToggle("AutoBoss", {
+    Text    = "Auto-Boss",
+    Default = false,
+})
+
+local BossDropdown = BossBox:AddDropdown("BossSelect", {
+    Values  = { "Red Haired Emperor", "Guardian of The Seas" },
+    Default = 1,
+    Text    = "Boss",
+})
+
+local FarmModeDropdown = FarmBox:AddDropdown("FarmMode", {
+    Values = {
+        "Lv. 0-25",    "Lv. 25-50",   "Lv. 50-75",   "Lv. 75-100",
+        "Lv. 100-150", "Lv. 150-175", "Lv. 175-200", "Lv. 200-225",
+        "Lv. 225-250", "Lv. 250-275", "Lv. 275-300", "Lv. 300-350",
+        "Lv. 350-400", "Lv. 400-450", "Lv. 450-475", "Lv. 475-500",
+        "Lv. 500-550", "Lv. 550-575", "Lv. 575-600", "Lv. 600-650",
+        "Lv. 650-700", "Lv. 700-725", "Lv. 725-750", "Lv. 750-800",
+        "Lv. 800-850", "Lv. 850-875", "Lv. 875-900", "Lv. 900-950",
+        "Lv. 950-1000","Lv. 1000",
+    },
+    Default = 1,
+    Text    = "Farm Mode",
+})
+
+-- ──────────────────────────────────────────────
+-- Farm Tab — Right (Configuration)
+-- ──────────────────────────────────────────────
+
+ThemeManager:SetLibrary(Library)
+SaveManager:SetLibrary(Library)
+SaveManager:SetFolder("LegendPiece")
+SaveManager:BuildConfigSection(Tabs.Farm)
+
+-- ──────────────────────────────────────────────
+-- Farm Settings Tab
+-- ──────────────────────────────────────────────
+
+local SettingsBox = Tabs.FarmSettings:AddLeftGroupbox("Settings")
+
+local function getWeapons()
+    local weapons = {}
+    local seen = {}
+    local function add(name)
+        if not name:find("<") and not seen[name] then
+            seen[name] = true
+            table.insert(weapons, name)
+        end
+    end
+    for _, tool in ipairs(LocalPlayer.Backpack:GetChildren()) do
+        if tool:IsA("Tool") then add(tool.Name) end
+    end
+    local char = LocalPlayer.Character
+    if char then
+        for _, obj in ipairs(char:GetChildren()) do
+            if obj:IsA("Tool") then add(obj.Name) end
+        end
+    end
+    if #weapons == 0 then table.insert(weapons, "None") end
+    return weapons
+end
+
+local WeaponDropdown = SettingsBox:AddDropdown("SelectWeapon", {
+    Values  = getWeapons(),
+    Default = 1,
+    Text    = "Select Weapon",
+})
+
+SettingsBox:AddButton({
+    Text = "Refresh Weapons",
+    Func = function()
+        WeaponDropdown:SetValues(getWeapons())
+    end,
+})
+
+local PositionDropdown = SettingsBox:AddDropdown("SelectPosition", {
+    Values  = { "Behind", "Below", "Front", "Above" },
+    Default = 1,
+    Text    = "Select Position",
+})
+
+local DistanceSlider = SettingsBox:AddSlider("FarmDistance", {
+    Text     = "Farm Distance",
+    Default  = 6,
+    Min      = 0,
+    Max      = 12,
+    Rounding = 2,
+})
+
+local SkillBox = Tabs.FarmSettings:AddLeftGroupbox("Auto-Skill")
+
+local AutoSkillToggle = SkillBox:AddToggle("AutoSkill", {
+    Text    = "Auto-Skill",
+    Default = false,
+})
+
+local SkillDropdown = SkillBox:AddDropdown("SelectSkills", {
+    Values   = { "Z", "X", "C", "V" },
+    Multi    = true,
+    Default  = {},
+    Text     = "Select Skills",
+})
+
+local StatBox = Tabs.FarmSettings:AddLeftGroupbox("Auto-Stat")
+
+local AutoStatToggle = StatBox:AddToggle("AutoStat", {
+    Text    = "Auto-Stat",
+    Default = false,
+})
+
+local StatDropdown = StatBox:AddDropdown("SelectStat", {
+    Values  = { "Defense", "Melee", "Sword", "Fruit" },
+    Default = 1,
+    Text    = "Select Stat",
+})
+
+local PointsSlider = StatBox:AddSlider("StatPoints", {
+    Text     = "Points",
+    Default  = 1,
+    Min      = 1,
+    Max      = 100,
+    Rounding = 0,
+})
+
+-- ──────────────────────────────────────────────
+-- Per-mode config
+-- mobName   = mob to track/lock onto
+-- spawnName = name sent to spawn remote (falls back to mobName)
+-- noQuest   = skip quest tracking, kill until all dead then re-spawn
+-- ──────────────────────────────────────────────
+
+local FarmConfig = {
+    ["Lv. 0-25"]    = { coords = Vector3.new(-449,  -13,  -730),  folder = "Starter Island",      mobName = "Bandit"         },
+    ["Lv. 25-50"]   = { coords = Vector3.new(-325,  130,   -75),  folder = "Starter Island",      mobName = "Boss Bandit"    },
+    ["Lv. 50-75"]   = { coords = Vector3.new(-89,     3, -2514),  folder = "Marine Island",       mobName = "Marine"         },
+    ["Lv. 75-100"]  = { coords = Vector3.new(-141,   65, -2847),  folder = "Marine Island",       mobName = "Trained Marine" },
+    ["Lv. 100-150"] = { coords = Vector3.new(97,     72, -2732),  folder = "Marine Island",       mobName = "Axe Hand"       },
+    ["Lv. 150-175"] = { coords = Vector3.new(-2178, -35, -2093),  folder = "Pirate Island",       mobName = "Pirate"         },
+    ["Lv. 175-200"] = { coords = Vector3.new(-2177, -35, -2107),  folder = "Pirate Island",       mobName = "Clown"          },
+    ["Lv. 200-225"] = { coords = Vector3.new(2004,  -28, -3299),  folder = "Jungle Island",       mobName = "Monkey"         },
+    ["Lv. 225-250"] = { coords = Vector3.new(1604,  -32, -3703),  folder = "Jungle Island",       mobName = "Gorilla King"   },
+    ["Lv. 250-275"] = { coords = Vector3.new(1230,  -32, -1867),  folder = "Floating Restaurant", mobName = "Chef"           },
+    ["Lv. 275-300"] = { coords = Vector3.new(1230,  -32, -1867),  folder = "Floating Restaurant", mobName = "Head Chef"      },
+    ["Lv. 300-350"] = { coords = Vector3.new(1230,  -32, -1867),  folder = "Floating Restaurant", mobName = "Golden Armor"   },
+    ["Lv. 350-400"] = { coords = Vector3.new(-1101, -38, -4774),  folder = "Shark Park",          mobName = "Fishman"        },
+    ["Lv. 400-450"] = { coords = Vector3.new(-1472, -35, -4689),  folder = "Shark Park",          mobName = "Shark Man"      },
+    ["Lv. 450-475"] = { coords = Vector3.new(4942,   15, -4427),  folder = "Legend Town",         mobName = "Vagabond"       },
+    ["Lv. 475-500"] = { coords = Vector3.new(4934,   15, -4434),  folder = "Legend Town",         mobName = "Strong Marine"  },
+    ["Lv. 500-550"] = { coords = Vector3.new(4934,   15, -4434),  folder = "Legend Town",         mobName = "Captain Smoker" },
+    ["Lv. 550-575"] = { coords = Vector3.new(-3932,  -8, -4340),  folder = "Snow Island",         mobName = "Snow Bandit"    },
+    ["Lv. 575-600"] = { coords = Vector3.new(-3932,  -8, -4340),  folder = "Snow Island",         mobName = "Snowman"        },
+    ["Lv. 600-650"] = { coords = Vector3.new(-4282, 108, -4851),  folder = "Snow Island",         mobName = "Icy Samurai"    },
+    ["Lv. 650-700"] = { coords = Vector3.new(-4529, 139, -4928),  folder = "Snow Island",         mobName = "Yeti"           },
+    ["Lv. 700-725"] = { coords = Vector3.new(-2568, -33, -6385),  folder = "Desert Island",       mobName = "Deserter"       },
+    ["Lv. 725-750"] = { coords = Vector3.new(-2568, -33, -6385),  folder = "Desert Island",       mobName = "Strong Deserter"},
+    ["Lv. 750-800"] = { coords = Vector3.new(-2283, -32, -7361),  folder = "Desert Island",       mobName = "Spikey"         },
+    ["Lv. 800-850"] = { coords = Vector3.new(-2613,  57, -7414),  folder = "Desert Island",       mobName = "Sandy"          },
+    ["Lv. 850-875"] = { coords = Vector3.new(-369,  767, -8152),  folder = "Sky Island",          mobName = "Sky Soldier"    },
+    ["Lv. 875-900"] = { coords = Vector3.new(113,   932, -8244),  folder = "Sky Island",          mobName = "God's Guards"   },
+    ["Lv. 900-950"] = { coords = Vector3.new(-1138,1039, -8887),  folder = "Sky Island",          mobName = "Judgement"      },
+    ["Lv. 950-1000"]= { coords = Vector3.new(196,  1414, -9675),  folder = "Sky Island",          mobName = "God"            },
+    ["Lv. 1000"]    = { coords = Vector3.new(-6222,  10, -8133),  folder = "Dark Castle",         mobName = "Knight Monkey",  noQuest = true             },
+}
+
+-- Maps a player level number to the right FarmConfig key
+local function getLevelMode(level)
+    if     level <   25 then return "Lv. 0-25"
+    elseif level <   50 then return "Lv. 25-50"
+    elseif level <   75 then return "Lv. 50-75"
+    elseif level <  100 then return "Lv. 75-100"
+    elseif level <  150 then return "Lv. 100-150"
+    elseif level <  175 then return "Lv. 150-175"
+    elseif level <  200 then return "Lv. 175-200"
+    elseif level <  225 then return "Lv. 200-225"
+    elseif level <  250 then return "Lv. 225-250"
+    elseif level <  275 then return "Lv. 250-275"
+    elseif level <  300 then return "Lv. 275-300"
+    elseif level <  350 then return "Lv. 300-350"
+    elseif level <  400 then return "Lv. 350-400"
+    elseif level <  450 then return "Lv. 400-450"
+    elseif level <  475 then return "Lv. 450-475"
+    elseif level <  500 then return "Lv. 475-500"
+    elseif level <  550 then return "Lv. 500-550"
+    elseif level <  575 then return "Lv. 550-575"
+    elseif level <  600 then return "Lv. 575-600"
+    elseif level <  650 then return "Lv. 600-650"
+    elseif level <  700 then return "Lv. 650-700"
+    elseif level <  725 then return "Lv. 700-725"
+    elseif level <  750 then return "Lv. 725-750"
+    elseif level <  800 then return "Lv. 750-800"
+    elseif level <  850 then return "Lv. 800-850"
+    elseif level <  875 then return "Lv. 850-875"
+    elseif level <  900 then return "Lv. 875-900"
+    elseif level <  950 then return "Lv. 900-950"
+    elseif level <= 1000 then return "Lv. 950-1000"
+    else                      return "Lv. 1000"
+    end
+end
+
+local function getPlayerLevel()
+    local ok, text = pcall(function()
+        return LocalPlayer.PlayerGui.HUD.Holder.LevelText.Text
+    end)
+    if not ok or not text then return 0 end
+    -- Text format is "Lv. 157" — extract the number
+    local level = tonumber(text:gsub(",", ""):match("%d+"))
+    return level or 0
+end
+
+-- ──────────────────────────────────────────────
+-- Helpers
+-- ──────────────────────────────────────────────
+
+local Reliable = ReplicatedStorage
+    :WaitForChild("Packages")
+    :WaitForChild("Warp")
+    :WaitForChild("Index")
+    :WaitForChild("Event")
+    :WaitForChild("Reliable")
+
+local Request = ReplicatedStorage
+    :WaitForChild("Packages")
+    :WaitForChild("Warp")
+    :WaitForChild("Index")
+    :WaitForChild("Event")
+    :WaitForChild("Request")
+
+local function getHRP()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    return char:FindFirstChild("HumanoidRootPart")
+end
+
+local function teleport(x, y, z)
+    local hrp = getHRP()
+    if hrp then hrp.CFrame = CFrame.new(x, y, z) end
+end
+
+local function getWeaponName()
+    local val = WeaponDropdown.Value
+    if val == "None" or val == nil then return nil end
+    return val
+end
+
+local function equipWeapon()
+    local name = getWeaponName()
+    if not name then return end
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+    for _, obj in ipairs(char:GetChildren()) do
+        if obj:IsA("Tool") and obj.Name == name then return end
+    end
+    local tool = LocalPlayer.Backpack:FindFirstChild(name)
+    if tool then hum:EquipTool(tool) end
+end
+
+local function getConfig()
+    if AutoLevelToggle.Value then
+        local level = getPlayerLevel()
+        if level > 0 then
+            local mode = getLevelMode(level)
+            return FarmConfig[mode] or FarmConfig[FarmModeDropdown.Value] or FarmConfig["Lv. 0-25"]
+        end
+        -- Level unreadable, fall back to dropdown selection instead of defaulting to Bandits
+        return FarmConfig[FarmModeDropdown.Value] or FarmConfig["Lv. 0-25"]
+    end
+    return FarmConfig[FarmModeDropdown.Value] or FarmConfig["Lv. 0-25"]
+end
+
+local function fireSpawnRemote(cfg)
+    cfg = cfg or getConfig()
+    local args = { buffer.fromstring("B"), { { cfg.spawnName or cfg.mobName } } }
+    Reliable:FireServer(unpack(args))
+end
+
+local function fireCancelQuestRemote()
+    local args = { buffer.fromstring("C"), { {} } }
+    Reliable:FireServer(unpack(args))
+end
+
+local function fireM1()
+    local name = getWeaponName()
+    if not name then return end
+    local args = { buffer.fromstring("="), { { name } } }
+    Reliable:FireServer(unpack(args))
+end
+
+local function getAvailablePoints()
+    local ok, text = pcall(function()
+        return LocalPlayer.PlayerGui.Menu.Main.CharacterFrame.Others.StatsHeader.PointsLabel.Text
+    end)
+    if not ok or not text then return 0 end
+    return tonumber(text:match(">(%d+)</font>")) or 0
+end
+
+local function fireStatRemote()
+    local stat   = StatDropdown.Value
+    local points = PointsSlider.Value
+    local args = { buffer.fromstring("@"), { { stat, points } } }
+    Reliable:FireServer(unpack(args))
+end
+
+local function isQuestActive()
+    local ok, frame = pcall(function()
+        return LocalPlayer.PlayerGui.QuestUI.Main.QuestFrame
+    end)
+    if not ok or not frame then return false end
+    return frame.Position.X.Scale > 0
+end
+
+-- Parses the quest level from the QuestFrame header text
+-- e.g. "<font size='25'>QUEST</font> <font size='18' ...>Lv. 150</font>" → 150
+local function getQuestLevel()
+    local ok, text = pcall(function()
+        return LocalPlayer.PlayerGui.QuestUI.Main.QuestFrame.Header.TextLabel.Text
+    end)
+    if not ok or not text then return nil end
+    return tonumber(text:match("Lv%.%s*(%d+)"))
+end
+
+-- Returns true if the active quest's level range matches the player's current level range
+local function isQuestCompatible()
+    local questLevel = getQuestLevel()
+    if not questLevel then return true end
+    return getLevelMode(questLevel) == getLevelMode(getPlayerLevel())
+end
+
+local function getMobs(overrideCfg)
+    local cfg = overrideCfg or getConfig()
+    local ok, folder = pcall(function()
+        return workspace.Holder.Mobs[cfg.folder]
+    end)
+    if not ok or not folder then return {} end
+    local mobs = {}
+    for _, mob in ipairs(folder:GetChildren()) do
+        if mob.Name == cfg.mobName then
+            table.insert(mobs, mob)
+        end
+    end
+    return mobs
+end
+
+local function isAlive(mob)
+    if not mob or not mob.Parent then return false end
+    local hum = mob:FindFirstChildOfClass("Humanoid")
+    return hum and hum.Health > 0
+end
+
+local function getTargetCFrame(mobHRP)
+    local dist   = DistanceSlider.Value
+    local pos    = PositionDropdown.Value
+    local mobPos = mobHRP.CFrame.Position
+
+    if dist == 0 then
+        return CFrame.lookAt(mobPos, mobPos + mobHRP.CFrame.LookVector)
+    elseif pos == "Behind" then
+        local p = mobPos - mobHRP.CFrame.LookVector * dist
+        return CFrame.lookAt(p, mobPos) -- face toward mob
+    elseif pos == "Front" then
+        local p = mobPos + mobHRP.CFrame.LookVector * dist
+        return CFrame.lookAt(p, mobPos) -- face toward mob
+    elseif pos == "Below" then
+        local p = mobPos - Vector3.new(0, dist, 0)
+        return CFrame.new(p) * CFrame.Angles(math.pi / 2, 0, 0) -- face up
+    elseif pos == "Above" then
+        local p = mobPos + Vector3.new(0, dist, 0)
+        return CFrame.new(p) * CFrame.Angles(-math.pi / 2, 0, 0) -- face down
+    end
+    return mobHRP.CFrame
+end
+
+local function isFarming()
+    return AutoQuestToggle.Value or AutoLevelToggle.Value or AutoBossToggle.Value
+end
+
+-- Returns the position of whichever mob/boss we're currently locked on
+-- Finds the current target's HRP position (boss takes priority over quest mobs)
+-- Defined as a late-binding function so getBoss (defined later) resolves correctly
+local getCurrentTargetPos
+getCurrentTargetPos = function()
+    -- getBoss is defined later in the script but resolved at call time
+    local ok, bossResult = pcall(function()
+        local boss = getBoss and getBoss()
+        if boss then
+            local hrp = boss:FindFirstChild("HumanoidRootPart")
+            if hrp then return hrp.Position end
+        end
+        return nil
+    end)
+    if ok and bossResult then return bossResult end
+
+    local mobs = getMobs()
+    for _, mob in ipairs(mobs) do
+        if mob and isAlive(mob) then
+            local hrp = mob:FindFirstChild("HumanoidRootPart")
+            if hrp then return hrp.Position end
+        end
+    end
+    return Vector3.new(0, 0, 0)
+end
+
+local function getEntityId()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+
+    -- Check character attributes
+    for k, v in pairs(char:GetAttributes()) do
+        return tostring(v) -- return the first attribute value found
+    end
+
+    -- Check HRP attributes
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if hrp then
+        for k, v in pairs(hrp:GetAttributes()) do
+            return tostring(v)
+        end
+    end
+
+    -- Check all IntValue / NumberValue / StringValue descendants
+    for _, v in ipairs(char:GetDescendants()) do
+        if v:IsA("IntValue") or v:IsA("NumberValue") or v:IsA("StringValue") then
+            local val = tostring(v.Value)
+            -- Entity IDs are typically 4-6 digit numbers
+            if val:match("^%d+$") and #val >= 4 and #val <= 6 then
+                return val
+            end
+        end
+    end
+
+    -- Check workspace.Holder for a player entity entry
+    local ok, id = pcall(function()
+        return tostring(workspace.Holder:FindFirstChild(LocalPlayer.Name):GetAttribute("EntityId"))
+    end)
+    if ok and id and id ~= "nil" then return id end
+
+    return nil
+end
+
+local function fireSkillZ(pos)
+    local id = getEntityId()
+    Library:Notify(id and ("Skill Z fired | ID: " .. id) or "Skill Z: entity ID not found!")
+    if not id then return end
+    local args = {
+        buffer.fromstring("\005"),
+        "\001",
+        {
+            {
+                id,
+                {
+                    "ChargeSkill",
+                    "Thousand Slices",
+                    vector.create(pos.X, pos.Y, pos.Z)
+                }
+            }
+        }
+    }
+    Request:FireServer(unpack(args))
+end
+
+local function fireSkillX(pos)
+    local id = getEntityId()
+    if not id then return end
+    local args = {
+        buffer.fromstring("\005"),
+        "\001",
+        {
+            {
+                id,
+                {
+                    "ChargeSkill",
+                    "Strongest Slash",
+                    vector.create(pos.X, pos.Y, pos.Z)
+                }
+            }
+        }
+    }
+    Request:FireServer(unpack(args))
+end
+
+-- Shared per-frame kill loop used by both quest and no-quest modes
+local function runKillLoop(shouldContinue, lockedCfg)
+    local pos  = PositionDropdown.Value
+    local char = LocalPlayer.Character
+    local hum  = char and char:FindFirstChildOfClass("Humanoid")
+    if hum and (pos == "Below" or pos == "Above") then
+        hum.AutoRotate = false
+    end
+
+    local velConn = game:GetService("RunService").Heartbeat:Connect(function()
+        local hrp = getHRP()
+        if hrp then
+            hrp.AssemblyLinearVelocity  = Vector3.zero
+            hrp.AssemblyAngularVelocity = Vector3.zero
+        end
+    end)
+
+    while isFarming() and shouldContinue() do
+        local mobs   = getMobs(lockedCfg) -- always use the cfg snapshot from this iteration
+        local target = nil
+        for _, mob in ipairs(mobs) do
+            if mob and isAlive(mob) then target = mob break end
+        end
+        local hrp = getHRP()
+        if hrp and target then
+            local mobHRP = target:FindFirstChild("HumanoidRootPart")
+            if mobHRP then hrp.CFrame = getTargetCFrame(mobHRP) end
+        end
+        task.wait()
+    end
+
+    velConn:Disconnect()
+    if hum then hum.AutoRotate = true end
+end
+
+-- ──────────────────────────────────────────────
+-- M1 Loop
+-- ──────────────────────────────────────────────
+
+task.spawn(function()
+    while true do
+        task.wait(0.2)
+        if isFarming() then pcall(fireM1) end
+    end
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(0.1)
+        if AutoStatToggle.Value and getAvailablePoints() > 0 then
+            pcall(fireStatRemote)
+        end
+    end
+end)
+
+local function isDarkBladeEquipped()
+    local char = LocalPlayer.Character
+    if not char then return false end
+    for _, obj in ipairs(char:GetChildren()) do
+        if obj:IsA("Tool") and obj.Name:lower():find("dark") and obj.Name:lower():find("blade") then
+            return true
+        end
+    end
+    return false
+end
+
+task.spawn(function()
+    while true do
+        task.wait(10)
+        if not AutoSkillToggle.Value then continue end
+        if not isDarkBladeEquipped() then continue end
+        if not isFarming() then continue end -- only fire when locked on something
+
+        local pos = getCurrentTargetPos()
+        -- If pos is zero vector there's no live target, skip
+        if pos == Vector3.new(0, 0, 0) then continue end
+
+        local selected = SkillDropdown.Value
+        if selected["Z"] then
+            pcall(fireSkillZ, pos)
+            task.wait(0.3)
+        end
+        if selected["X"] then
+            pcall(fireSkillX, pos)
+            task.wait(0.3)
+        end
+    end
+end)
+
+-- ──────────────────────────────────────────────
+-- Re-equip on death or manual unequip
+-- ──────────────────────────────────────────────
+
+local function setupReequip(char)
+    char.ChildRemoved:Connect(function(obj)
+        if not isFarming() then return end
+        local name = getWeaponName()
+        if obj:IsA("Tool") and obj.Name == name then
+            task.wait(0.15)
+            equipWeapon()
+        end
+    end)
+end
+
+setupReequip(Character)
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+    Character = char
+    setupReequip(char)
+    if isFarming() then
+        task.wait(1)
+        equipWeapon()
+    end
+end)
+
+WeaponDropdown:OnChanged(function()
+    if isFarming() then equipWeapon() end
+end)
+
+-- ──────────────────────────────────────────────
+-- Auto-Quest Loop
+-- ──────────────────────────────────────────────
+
+local preFarmCFrame = nil
+
+local function questLoop()
+    local hrp = getHRP()
+    if hrp then preFarmCFrame = hrp.CFrame end
+
+    while isFarming() do
+        pcall(equipWeapon)
+        local cfg = getConfig()
+        Library:Notify("Level: " .. tostring(getPlayerLevel()) .. " | Mode: " .. tostring(FarmModeDropdown.Value) .. " | Mob: " .. cfg.mobName)
+        teleport(cfg.coords.X, cfg.coords.Y, cfg.coords.Z)
+        task.wait(3)
+
+        if cfg.noQuest then
+            runKillLoop(function()
+                local mobs = getMobs(cfg)
+                for _, mob in ipairs(mobs) do
+                    if mob and isAlive(mob) then return true end
+                end
+                teleport(cfg.coords.X, cfg.coords.Y, cfg.coords.Z)
+                task.wait(3)
+                return true
+            end, cfg)
+        else
+            -- Keep firing the spawn remote until the quest becomes active
+            local attempts = 0
+            repeat
+                pcall(fireSpawnRemote, cfg)
+                local ok, frame = pcall(function()
+                    return LocalPlayer.PlayerGui.QuestUI.Main.QuestFrame
+                end)
+                local framePos = ok and frame and tostring(math.floor(frame.Position.X.Scale * 1000) / 1000) or "no frame"
+                Library:Notify("Attempt " .. attempts + 1 .. " | mob: " .. cfg.mobName .. " | frame X: " .. framePos)
+                task.wait(2)
+                attempts += 1
+            until isQuestActive() or not isFarming() or attempts >= 10
+
+            if not isFarming() then continue end
+
+            -- If quest is for wrong level range, cancel and restart
+            if isQuestActive() and not isQuestCompatible() then
+                pcall(fireCancelQuestRemote)
+                task.wait(0.5)
+                continue
+            end
+
+            -- Kill mobs — also cancel mid-kill if level range changes
+            runKillLoop(function()
+                if isQuestActive() and not isQuestCompatible() then
+                    pcall(fireCancelQuestRemote)
+                    return false
+                end
+                return isQuestActive()
+            end, cfg)
+        end
+
+        task.wait(0.5)
+    end
+end
+
+local farmingActive = false
+
+local function startFarming()
+    if farmingActive then return end
+    farmingActive = true
+    task.spawn(function()
+        questLoop()
+        farmingActive = false
+    end)
+end
+
+local function stopFarming()
+    task.wait(0.3)
+    local char = LocalPlayer.Character
+    local hum  = char and char:FindFirstChildOfClass("Humanoid")
+    if hum then hum.AutoRotate = true end
+    local hrp = getHRP()
+    if hrp then
+        hrp.AssemblyLinearVelocity  = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+        if preFarmCFrame then hrp.CFrame = preFarmCFrame end
+    end
+end
+
+AutoQuestToggle:OnChanged(function()
+    if AutoQuestToggle.Value then
+        startFarming()
+    elseif not AutoLevelToggle.Value then
+        stopFarming()
+    end
+end)
+
+AutoLevelToggle:OnChanged(function()
+    if AutoLevelToggle.Value then
+        startFarming()
+    elseif not AutoQuestToggle.Value then
+        stopFarming()
+    end
+end)
+
+-- ──────────────────────────────────────────────
+-- Auto-Boss
+-- ──────────────────────────────────────────────
+
+local BossConfig = {
+    ["Red Haired Emperor"]    = { coords = Vector3.new(-6230,  15,  1149), folder = "Rock Island",       mobName = "Red Haired Emperor"    },
+    ["Guardian of The Seas"]= { coords = Vector3.new( 4256,  47, -1802), folder = "Sea Beast Island",  mobName = "Guardian of The Seas" },
+}
+
+local bossActive = false
+
+local function getBoss()
+    local cfg = BossConfig[BossDropdown.Value]
+    if not cfg then return nil end
+    local ok, folder = pcall(function()
+        return workspace.Holder.Mobs[cfg.folder]
+    end)
+    if not ok or not folder then return nil end
+    return folder:FindFirstChild(cfg.mobName)
+end
+
+local function bossLoop()
+    local hrp = getHRP()
+    if hrp then preFarmCFrame = hrp.CFrame end
+
+    while AutoBossToggle.Value do
+        local cfg = BossConfig[BossDropdown.Value]
+        if not cfg then task.wait(1) continue end
+
+        pcall(equipWeapon)
+        teleport(cfg.coords.X, cfg.coords.Y, cfg.coords.Z)
+        task.wait(1.5)
+
+        -- Lock onto boss until dead or toggle off
+        local pos  = PositionDropdown.Value
+        local char = LocalPlayer.Character
+        local hum  = char and char:FindFirstChildOfClass("Humanoid")
+        if hum and (pos == "Below" or pos == "Above") then
+            hum.AutoRotate = false
+        end
+
+        local velConn = game:GetService("RunService").Heartbeat:Connect(function()
+            local hrp2 = getHRP()
+            if hrp2 then
+                hrp2.AssemblyLinearVelocity  = Vector3.zero
+                hrp2.AssemblyAngularVelocity = Vector3.zero
+            end
+        end)
+
+        while AutoBossToggle.Value do
+            local boss = getBoss()
+            if not boss or not isAlive(boss) then break end
+            local bossHRP = boss:FindFirstChild("HumanoidRootPart")
+            local hrp2 = getHRP()
+            if hrp2 and bossHRP then
+                hrp2.CFrame = getTargetCFrame(bossHRP)
+            end
+            task.wait()
+        end
+
+        velConn:Disconnect()
+        if hum then hum.AutoRotate = true end
+
+        -- Boss is dead, wait a bit before trying again
+        task.wait(3)
+    end
+end
+
+AutoBossToggle:OnChanged(function()
+    if AutoBossToggle.Value then
+        if bossActive then return end
+        bossActive = true
+        task.spawn(function()
+            bossLoop()
+            bossActive = false
+        end)
+    else
+        task.wait(0.3)
+        local char = LocalPlayer.Character
+        local hum  = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then hum.AutoRotate = true end
+        local hrp = getHRP()
+        if hrp then
+            hrp.AssemblyLinearVelocity  = Vector3.zero
+            hrp.AssemblyAngularVelocity = Vector3.zero
+            if preFarmCFrame then hrp.CFrame = preFarmCFrame end
+        end
+    end
+end)
+
+-- ──────────────────────────────────────────────
+-- Auto-Level — cancel quest when level range changes
+-- ──────────────────────────────────────────────
+
+task.spawn(function()
+    local lastMode = nil
+    while true do
+        task.wait(2)
+        if not AutoLevelToggle.Value then
+            lastMode = nil
+            continue
+        end
+        local currentMode = getLevelMode(getPlayerLevel())
+        if lastMode and currentMode ~= lastMode then
+            pcall(fireCancelQuestRemote)
+        end
+        lastMode = currentMode
+    end
+end)
+
+-- ──────────────────────────────────────────────
+-- Init
+-- ──────────────────────────────────────────────
+
+ThemeManager:ApplyTheme("Dark Blue")
+SaveManager:LoadAutoloadConfig()
