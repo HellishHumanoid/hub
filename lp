@@ -827,29 +827,46 @@ local function bossLoop()
 
             if not AutoBossToggle.Value or BossDropdown.Value ~= "Sea Beast" then break end
 
-            -- Phase 2: redeem orb, equip it, spawn Sea Beast
-            Library:Notify("Sea Beast: orb obtained! Spawning...")
+            -- Phase 2: teleport, redeem orb, equip, spawn Sea Beast
+            Library:Notify("Sea Beast: orb obtained! Teleporting to spawn point...")
             teleport(4171, 50, -2035)
             task.wait(2)
+
+            -- Redeem the orb
             Reliable:FireServer(buffer.fromstring("."), { { "Sea Beast's Orb" } })
-            task.wait(1)
-
-            local char = LocalPlayer.Character
-            if char then
-                local hum = char:FindFirstChildOfClass("Humanoid")
-                local orb = LocalPlayer.Backpack:FindFirstChild("Sea Beast's Orb")
-                if hum and orb then hum:EquipTool(orb) end
-            end
-            task.wait(0.5)
-
-            local ok, seaBeast = pcall(function() return workspace.Holder.Mobs["Sea Beast Island"]["Sea Beast"] end)
-            if ok and seaBeast then
-                Request:FireServer(buffer.fromstring("\026"), "\001", { { "1", { seaBeast } } })
-            end
+            Library:Notify("Sea Beast: orb redeemed! Waiting for item...")
             task.wait(2)
 
+            -- Wait until orb appears in backpack then equip it
+            local orbTool = nil
+            local waited = 0
+            repeat
+                orbTool = LocalPlayer.Backpack:FindFirstChild("Sea Beast's Orb")
+                if not orbTool then task.wait(0.5) waited += 0.5 end
+            until orbTool or waited >= 10
+
+            if orbTool then
+                local char2 = LocalPlayer.Character
+                local hum2  = char2 and char2:FindFirstChildOfClass("Humanoid")
+                if hum2 then
+                    hum2:EquipTool(orbTool)
+                    Library:Notify("Sea Beast: orb equipped! Firing spawn remote...")
+                    task.wait(1)
+                end
+            else
+                Library:Notify("Sea Beast: orb not found in backpack!")
+            end
+
+            -- Fire spawn remote — WaitForChild to ensure instance exists
+            local seaBeast = workspace.Holder.Mobs["Sea Beast Island"]:WaitForChild("Sea Beast", 15)
+            if seaBeast then
+                Request:FireServer(buffer.fromstring("\026"), "\001", { { "1", { seaBeast } } })
+                Library:Notify("Sea Beast: spawn remote fired! Waiting...")
+                task.wait(3)
+            end
+
             -- Phase 3: kill Sea Beast
-            Library:Notify("Sea Beast: spawned! Killing...")
+            Library:Notify("Sea Beast: killing!")
             lockAndKill(function()
                 local ok2, mob = pcall(function() return workspace.Holder.Mobs["Sea Beast Island"]["Sea Beast"] end)
                 return ok2 and mob or nil
