@@ -888,6 +888,23 @@ local function bossLoop()
 
         -- ── Sea Beast special flow ──────────────────
         if cfg.seaBeast then
+            -- If Sea Beast is already up, skip straight to killing it
+            local existingBeast = nil
+            pcall(function()
+                existingBeast = workspace.Holder.Mobs["Sea Beast Island"]["Sea Beast"]
+            end)
+            if existingBeast and isAlive(existingBeast) then
+                Library:Notify("Sea Beast: Already spawned! Killing...")
+                lockAndKill(function()
+                    local ok, mob = pcall(function()
+                        return workspace.Holder.Mobs["Sea Beast Island"]["Sea Beast"]
+                    end)
+                    return ok and mob or nil
+                end)
+                task.wait(1)
+                continue
+            end
+
             local guardianCfg = BossConfig["Guardian of The Seas"]
             local orbsBefore  = getOrbCount()
 
