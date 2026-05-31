@@ -813,14 +813,14 @@ end)
 local BossConfig = {
     ["Red Haired Emperor"]  = { coords = Vector3.new(-6230,  15,  1149), folder = "Rock Island",      mobName = "Red Haired Emperor"    },
     ["Guardian of The Seas"]= { coords = Vector3.new( 4256,  47, -1802), folder = "Sea Beast Island", mobName = "Guardian of The Seas"  },
-    ["Sea Beast"]           = { seaBeast = true },
+    ["Sea Beast"]           = { coords = Vector3.new(4256, 47, -1802), folder = "Sea Beast Island", mobName = "Sea Beast" },
 }
 
 local bossActive = false
 
 local function getBoss()
     local cfg = BossConfig[BossDropdown.Value]
-    if not cfg or cfg.seaBeast then return nil end
+    if not cfg then return nil end
     local ok, folder = pcall(function()
         return workspace.Holder.Mobs[cfg.folder]
     end)
@@ -828,45 +828,6 @@ local function getBoss()
     return folder:FindFirstChild(cfg.mobName)
 end
 
--- Sea Beast helpers
-local function getOrbCount()
-    local ok, val = pcall(function()
-        return LocalPlayer.Data.Inventory["Sea Beast's Orb"]:GetAttribute("Amount")
-    end)
-    return (ok and tonumber(val)) or 0
-end
-
-local function fireRedeemOrbRemote()
-    local args = { buffer.fromstring("."), { { "Sea Beast's Orb" } } }
-    Reliable:FireServer(unpack(args))
-end
-
-local function equipOrb()
-    local char = LocalPlayer.Character
-    if not char then return end
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if not hum then return end
-    local tool = LocalPlayer.Backpack:FindFirstChild("Sea Beast's Orb")
-    if tool then hum:EquipTool(tool) end
-end
-
-local function fireSeaBeastSpawnRemote()
-    local ok, seaBeast = pcall(function()
-        return workspace.Holder.Mobs["Sea Beast Island"]["Sea Beast"]
-    end)
-    if not ok or not seaBeast then return end
-    local args = {
-        buffer.fromstring("\026"),
-        "\001",
-        {
-            {
-                "71990", -- session-based ID, update if needed
-                { seaBeast }
-            }
-        }
-    }
-    Request:FireServer(unpack(args))
-end
 
 local function lockAndKill(getMobFn)
     local pos  = PositionDropdown.Value
@@ -908,68 +869,6 @@ local function bossLoop()
     while AutoBossToggle.Value do
         local cfg = BossConfig[BossDropdown.Value]
         if not cfg then task.wait(1) continue end
-
-        -- ── Sea Beast special flow ──────────────────
-        if cfg.seaBeast then
-            -- If Sea Beast is already up, skip straight to killing it
-            local existingBeast = nil
-            pcall(function()
-                existingBeast = workspace.Holder.Mobs["Sea Beast Island"]["Sea Beast"]
-            end)
-            if existingBeast and isAlive(existingBeast) then
-                Library:Notify("Sea Beast: Already spawned! Killing...")
-                lockAndKill(function()
-                    local ok, mob = pcall(function()
-                        return workspace.Holder.Mobs["Sea Beast Island"]["Sea Beast"]
-                    end)
-                    return ok and mob or nil
-                end)
-                task.wait(1)
-                continue
-            end
-
-            local guardianCfg = BossConfig["Guardian of The Seas"]
-            local orbsBefore  = getOrbCount()
-
-            -- Phase 1: kill Guardians until orb drops
-            Library:Notify("Sea Beast: Farming Guardian for orb...")
-            pcall(equipWeapon)
-            teleport(guardianCfg.coords.X, guardianCfg.coords.Y, guardianCfg.coords.Z)
-            task.wait(1.5)
-
-            lockAndKill(function()
-                if getOrbCount() > orbsBefore then return nil end
-                if BossDropdown.Value ~= "Sea Beast" then return nil end
-                local ok, folder = pcall(function() return workspace.Holder.Mobs[guardianCfg.folder] end)
-                if not ok or not folder then return nil end
-                return folder:FindFirstChild(guardianCfg.mobName)
-            end)
-
-            if not AutoBossToggle.Value or BossDropdown.Value ~= "Sea Beast" then break end
-
-            -- Phase 2: redeem orb, equip it, spawn Sea Beast
-            Library:Notify("Sea Beast: Orb obtained! Redeeming...")
-            teleport(4171, 50, -2035)
-            task.wait(2)
-            pcall(fireRedeemOrbRemote)
-            task.wait(1)
-            pcall(equipOrb)
-            task.wait(0.5)
-            pcall(fireSeaBeastSpawnRemote)
-            task.wait(2)
-
-            -- Phase 3: kill Sea Beast
-            Library:Notify("Sea Beast: Spawned! Killing...")
-            lockAndKill(function()
-                local ok, mob = pcall(function()
-                    return workspace.Holder.Mobs["Sea Beast Island"]["Sea Beast"]
-                end)
-                return ok and mob or nil
-            end)
-
-            task.wait(1)
-            continue
-        end
 
         -- ── Normal boss flow ────────────────────────
         pcall(equipWeapon)
