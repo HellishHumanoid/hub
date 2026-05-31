@@ -174,6 +174,13 @@ local PointsSlider = StatBox:AddSlider("StatPoints", {
     Rounding = 0,
 })
 
+local HakiBox = Tabs.FarmSettings:AddLeftGroupbox("Auto-Haki")
+
+local AutoHakiToggle = HakiBox:AddToggle("AutoHaki", {
+    Text    = "Auto-Haki",
+    Default = false,
+})
+
 -- ──────────────────────────────────────────────
 -- Per-mode config
 -- mobName   = mob to track/lock onto
@@ -345,6 +352,20 @@ local function getAvailablePoints()
     end)
     if not ok or not text then return 0 end
     return tonumber(text:match(">(%d+)</font>")) or 0
+end
+
+local function fireHakiRemote()
+    local args = {
+        buffer.fromstring("\t"),
+        "\001",
+        {
+            {
+                "92935",
+                {}
+            }
+        }
+    }
+    Request:FireServer(unpack(args))
 end
 
 local function fireStatRemote()
@@ -644,6 +665,16 @@ LocalPlayer.CharacterAdded:Connect(function(char)
         task.wait(1)
         equipWeapon()
     end
+    if AutoHakiToggle.Value then
+        task.wait(1)
+        pcall(fireHakiRemote)
+    end
+end)
+
+AutoHakiToggle:OnChanged(function()
+    if AutoHakiToggle.Value then
+        pcall(fireHakiRemote)
+    end
 end)
 
 WeaponDropdown:OnChanged(function()
@@ -848,9 +879,15 @@ end)
 -- Auto-Boss Hop
 -- ──────────────────────────────────────────────
 
+local REEXECUTE_CODE = 'loadstring(game:HttpGet("https://raw.githubusercontent.com/HellishHumanoid/hub/refs/heads/main/lp"))()'
+
 local function queueReexecute()
-    if queue_on_teleport then
-        queue_on_teleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/HellishHumanoid/hub/refs/heads/main/lp"))()')
+    if syn and syn.queue_on_teleport then
+        syn.queue_on_teleport(REEXECUTE_CODE)
+    elseif queue_on_teleport then
+        queue_on_teleport(REEXECUTE_CODE)
+    elseif fluxus and fluxus.queue_on_teleport then
+        fluxus.queue_on_teleport(REEXECUTE_CODE)
     end
 end
 
