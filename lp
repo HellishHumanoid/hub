@@ -563,18 +563,13 @@ local function runKillLoop(shouldContinue, lockedCfg)
     local pos  = PositionDropdown.Value
     local char = LocalPlayer.Character
     local hum  = char and char:FindFirstChildOfClass("Humanoid")
+    local hrp  = getHRP()
+
     if hum then
         if pos == "Below" or pos == "Above" then hum.AutoRotate = false end
         hum:ChangeState(Enum.HumanoidStateType.Physics)
     end
-
-    local velConn = game:GetService("RunService").Heartbeat:Connect(function()
-        local hrp = getHRP()
-        if hrp then
-            hrp.AssemblyLinearVelocity  = Vector3.zero
-            hrp.AssemblyAngularVelocity = Vector3.zero
-        end
-    end)
+    if hrp then hrp.Anchored = true end
 
     while isFarming() and shouldContinue() do
         local mobs   = getMobs(lockedCfg)
@@ -582,7 +577,7 @@ local function runKillLoop(shouldContinue, lockedCfg)
         for _, mob in ipairs(mobs) do
             if mob and isAlive(mob) then target = mob break end
         end
-        local hrp = getHRP()
+        hrp = getHRP()
         if hrp and target then
             local mobHRP = target:FindFirstChild("HumanoidRootPart")
             if mobHRP then hrp.CFrame = getTargetCFrame(mobHRP) end
@@ -590,15 +585,15 @@ local function runKillLoop(shouldContinue, lockedCfg)
         task.wait()
     end
 
-    velConn:Disconnect()
+    hrp = getHRP()
+    if hrp then
+        hrp.Anchored               = false
+        hrp.AssemblyLinearVelocity  = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+    end
     if hum then
         hum.AutoRotate = true
         hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-    end
-    local hrp = getHRP()
-    if hrp then
-        hrp.AssemblyLinearVelocity  = Vector3.zero
-        hrp.AssemblyAngularVelocity = Vector3.zero
     end
 end
 
@@ -774,12 +769,16 @@ local function stopFarming()
     task.wait(0.3)
     local char = LocalPlayer.Character
     local hum  = char and char:FindFirstChildOfClass("Humanoid")
-    if hum then hum.AutoRotate = true end
-    local hrp = getHRP()
+    local hrp  = getHRP()
     if hrp then
+        hrp.Anchored               = false
         hrp.AssemblyLinearVelocity  = Vector3.zero
         hrp.AssemblyAngularVelocity = Vector3.zero
         if preFarmCFrame then hrp.CFrame = preFarmCFrame end
+    end
+    if hum then
+        hum.AutoRotate = true
+        hum:ChangeState(Enum.HumanoidStateType.GettingUp)
     end
 end
 
@@ -865,34 +864,32 @@ local function lockAndKill(getMobFn)
     local pos  = PositionDropdown.Value
     local char = LocalPlayer.Character
     local hum  = char and char:FindFirstChildOfClass("Humanoid")
+    local h    = getHRP()
+
     if hum then
         if pos == "Below" or pos == "Above" then hum.AutoRotate = false end
         hum:ChangeState(Enum.HumanoidStateType.Physics)
     end
-    local velConn = game:GetService("RunService").Heartbeat:Connect(function()
-        local h = getHRP()
-        if h then
-            h.AssemblyLinearVelocity  = Vector3.zero
-            h.AssemblyAngularVelocity = Vector3.zero
-        end
-    end)
+    if h then h.Anchored = true end
+
     while AutoBossToggle.Value do
         local mob = getMobFn()
         if not mob or not isAlive(mob) then break end
         local mobHRP = mob:FindFirstChild("HumanoidRootPart")
-        local h = getHRP()
+        h = getHRP()
         if h and mobHRP then h.CFrame = getTargetCFrame(mobHRP) end
         task.wait()
     end
-    velConn:Disconnect()
+
+    h = getHRP()
+    if h then
+        h.Anchored               = false
+        h.AssemblyLinearVelocity  = Vector3.zero
+        h.AssemblyAngularVelocity = Vector3.zero
+    end
     if hum then
         hum.AutoRotate = true
         hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-    end
-    local h = getHRP()
-    if h then
-        h.AssemblyLinearVelocity  = Vector3.zero
-        h.AssemblyAngularVelocity = Vector3.zero
     end
 end
 
