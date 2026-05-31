@@ -3,6 +3,10 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local LocalPlayer = Players.LocalPlayer
+while not LocalPlayer do
+    task.wait(0.1)
+    LocalPlayer = Players.LocalPlayer
+end
 local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 
 -- Load Linoria
