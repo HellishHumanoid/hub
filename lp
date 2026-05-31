@@ -882,12 +882,17 @@ end)
 local REEXECUTE_CODE = 'loadstring(game:HttpGet("https://raw.githubusercontent.com/HellishHumanoid/hub/refs/heads/main/lp"))()'
 
 local function queueReexecute()
-    if syn and syn.queue_on_teleport then
-        syn.queue_on_teleport(REEXECUTE_CODE)
-    elseif queue_on_teleport then
-        queue_on_teleport(REEXECUTE_CODE)
-    elseif fluxus and fluxus.queue_on_teleport then
-        fluxus.queue_on_teleport(REEXECUTE_CODE)
+    local fn =
+        (syn and syn.queue_on_teleport) or
+        (type(queue_on_teleport) == "function" and queue_on_teleport) or
+        (fluxus and fluxus.queue_on_teleport) or
+        (KRNL_ENV and KRNL_ENV.queue_on_teleport)
+
+    if fn then
+        local ok, err = pcall(fn, REEXECUTE_CODE)
+        Library:Notify(ok and "Re-execute queued!" or "Queue failed: " .. tostring(err))
+    else
+        Library:Notify("queue_on_teleport not found on this executor!")
     end
 end
 
@@ -941,6 +946,7 @@ local function bossHopLoop()
         if not boss or not isAlive(boss) then
             Library:Notify("Boss not found — server hopping...")
             queueReexecute()
+            task.wait(0.5)
             serverHop()
             task.wait(15) -- wait for teleport
             continue
@@ -982,6 +988,7 @@ local function bossHopLoop()
         Library:Notify("Boss killed! Server hopping...")
         task.wait(1)
         queueReexecute()
+        task.wait(0.5)
         serverHop()
         task.wait(15)
     end
