@@ -361,7 +361,7 @@ local function getAvailablePoints()
 end
 
 local function fireHakiRemote()
-    local id = capturedIds["Haki"] or "92935"
+    local id = capturedIds["Haki"] or "86862"
     local args = {
         buffer.fromstring("\t"),
         "\001",
@@ -488,37 +488,45 @@ local capturedIds = {
     ["Haki"]             = nil,
 }
 
--- Hook Request:FireServer to silently capture IDs as the game uses them
+-- Hook Request:FireServer to silently capture session IDs
+local function tryCapture(buf, a3)
+    local inner = type(a3) == "table" and type(a3[1]) == "table" and a3[1]
+    if not inner or type(inner[1]) ~= "string" then return end
+    local data = inner[2]
+    if type(data) == "table" and data[1] == "ChargeSkill" and type(data[2]) == "string" then
+        capturedIds[data[2]] = inner[1]
+    end
+    if type(buf) == "buffer" and buffer.len(buf) == 1 and buffer.readu8(buf, 0) == 9 then
+        capturedIds["Haki"] = inner[1]
+    end
+end
+
 pcall(function()
-    local mt  = getrawmetatable(game)
-    local old = mt.__namecall
-    setreadonly(mt, false)
-    mt.__namecall = newcclosure(function(self, ...)
-        local args = {...} -- capture varargs before any inner functions
-        local method = getnamecallmethod()
-        if method == "FireServer" and self == Request then
-            local buf   = args[1]
-            local inner = type(args[3]) == "table" and type(args[3][1]) == "table" and args[3][1]
-            if inner and type(inner[1]) == "string" then
-                local data = inner[2]
-                -- Skill remote: buf \005, data = { "ChargeSkill", skillName, vec }
-                if type(data) == "table" and data[1] == "ChargeSkill" and type(data[2]) == "string" then
-                    capturedIds[data[2]] = inner[1]
-                end
-                -- Haki remote: buf \t (byte 9)
-                if type(buf) == "buffer" and buffer.len(buf) == 1 and buffer.readu8(buf, 0) == 9 then
-                    capturedIds["Haki"] = inner[1]
-                end
+    if hookmetamethod then
+        hookmetamethod(game, "__namecall", function(self, ...)
+            if getnamecallmethod() == "FireServer" and self == Request then
+                local a1, _, a3 = ...
+                tryCapture(a1, a3)
             end
+            return hookmetamethod(game, "__namecall")(self, ...)
+        end)
+    else
+        local mt  = getrawmetatable(game)
+        local old = mt.__namecall
+        setreadonly(mt, false)
+        mt.__namecall = function(self, ...)
+            if getnamecallmethod() == "FireServer" and self == Request then
+                local a1, _, a3 = ...
+                tryCapture(a1, a3)
+            end
+            return old(self, ...)
         end
-        return old(self, unpack(args))
-    end)
-    setreadonly(mt, true)
+        setreadonly(mt, true)
+    end
 end)
 
 local function fireSkillZ(pos)
-    local id = capturedIds["Thousand Slices"]
-    if not id then return end
+    local id = capturedIds["Thousand Slices"] or "68921"
     local args = {
         buffer.fromstring("\005"),
         "\001",
@@ -537,8 +545,7 @@ local function fireSkillZ(pos)
 end
 
 local function fireSkillX(pos)
-    local id = capturedIds["Strongest Slash"]
-    if not id then return end
+    local id = capturedIds["Strongest Slash"] or "67786"
     local args = {
         buffer.fromstring("\005"),
         "\001",
@@ -676,6 +683,9 @@ end)
 
 AutoHakiToggle:OnChanged(function()
     if AutoHakiToggle.Value then
+        if not capturedIds["Haki"] then
+            Library:Notify("Auto-Haki: Use Haki once manually to register its ID!")
+        end
         pcall(fireHakiRemote)
     end
 end)
