@@ -1011,8 +1011,7 @@ end)
 -- ──────────────────────────────────────────────
 
 local REEXECUTE_CODE = [[
-repeat task.wait(1) until game:IsLoaded() and game.Players.LocalPlayer.Character
-task.wait(3)
+wait(5)
 loadstring(game:HttpGet("https://raw.githubusercontent.com/HellishHumanoid/hub/refs/heads/main/lp"))()
 ]]
 
