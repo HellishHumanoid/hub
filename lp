@@ -879,7 +879,11 @@ end)
 -- Auto-Boss Hop
 -- ──────────────────────────────────────────────
 
-local REEXECUTE_CODE = 'loadstring(game:HttpGet("https://raw.githubusercontent.com/HellishHumanoid/hub/refs/heads/main/lp"))()'
+local REEXECUTE_CODE = [[
+repeat task.wait(1) until game:IsLoaded() and game.Players.LocalPlayer.Character
+task.wait(3)
+loadstring(game:HttpGet("https://raw.githubusercontent.com/HellishHumanoid/hub/refs/heads/main/lp"))()
+]]
 
 local function queueReexecute()
     local fn =
