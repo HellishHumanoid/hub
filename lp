@@ -23,8 +23,10 @@ local Window = Library:CreateWindow({
 })
 
 local Tabs = {
-    Farm         = Window:AddTab("Farm"),
-    FarmSettings = Window:AddTab("Farm Settings"),
+    Farm          = Window:AddTab("Farm"),
+    FarmSettings  = Window:AddTab("Farm Settings"),
+    Teleport      = Window:AddTab("Teleport"),
+    Configuration = Window:AddTab("Configuration"),
 }
 
 -- ──────────────────────────────────────────────
@@ -80,13 +82,13 @@ local FarmModeDropdown = FarmBox:AddDropdown("FarmMode", {
 })
 
 -- ──────────────────────────────────────────────
--- Farm Tab — Right (Configuration)
+-- Configuration & Teleport Tabs built after UI
+-- (see bottom of script)
 -- ──────────────────────────────────────────────
 
 ThemeManager:SetLibrary(Library)
 SaveManager:SetLibrary(Library)
 SaveManager:SetFolder("LegendPiece")
-SaveManager:BuildConfigSection(Tabs.Farm)
 
 -- ──────────────────────────────────────────────
 -- Farm Settings Tab
@@ -904,25 +906,46 @@ local function queueReexecute()
     end
 end
 
+local visitedServers = { [game.JobId] = true }
+
 local function serverHop()
     local TeleportService = game:GetService("TeleportService")
     local HttpService     = game:GetService("HttpService")
-    -- Try to find a different public server to join
+
     local ok, result = pcall(function()
-        local data = HttpService:JSONDecode(game:HttpGet(
-            "https://games.roblox.com/v1/games/" .. game.PlaceId ..
-            "/servers/Public?sortOrder=Asc&limit=100"
-        ))
-        for _, server in ipairs(data.data or {}) do
-            if server.id ~= game.JobId and server.playing < server.maxPlayers then
-                TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id, LocalPlayer)
-                return true
+        local cursor = nil
+        -- Page through servers until we find an unvisited one
+        repeat
+            local url = "https://games.roblox.com/v1/games/" .. game.PlaceId ..
+                        "/servers/Public?sortOrder=Asc&limit=100" ..
+                        (cursor and ("&cursor=" .. cursor) or "")
+            local data = HttpService:JSONDecode(game:HttpGet(url))
+
+            -- Shuffle the server list so we don't always pick the same first entry
+            local servers = data.data or {}
+            for i = #servers, 2, -1 do
+                local j = math.random(i)
+                servers[i], servers[j] = servers[j], servers[i]
             end
-        end
+
+            for _, server in ipairs(servers) do
+                local hasRoom = server.playing < server.maxPlayers
+                if hasRoom and not visitedServers[server.id] then
+                    visitedServers[server.id] = true
+                    TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id, LocalPlayer)
+                    return true
+                end
+            end
+
+            cursor = data.nextPageCursor
+        until not cursor
+
+        -- All known servers visited, clear history (except current) and retry next call
+        visitedServers = { [game.JobId] = true }
         return false
     end)
+
     if not ok or not result then
-        -- Fallback: rejoin any server
         pcall(function()
             TeleportService:Teleport(game.PlaceId, LocalPlayer)
         end)
@@ -1043,6 +1066,56 @@ task.spawn(function()
         lastMode = currentMode
     end
 end)
+
+-- ──────────────────────────────────────────────
+-- Teleport Tab
+-- ──────────────────────────────────────────────
+
+local IslandCoords = {
+    ["Starter Island"]      = Vector3.new(-533,   42,  -241),
+    ["Lonely Island"]       = Vector3.new(  27,  -15, -1363),
+    ["Mysterious Tower"]    = Vector3.new( 863,  258,  -783),
+    ["Floating Restaurant"] = Vector3.new(1264,   -2, -1907),
+    ["Sea Beast Island"]    = Vector3.new(4167,   49, -1968),
+    ["Legend Town"]         = Vector3.new(4707,   17, -4410),
+    ["Jungle Island"]       = Vector3.new(2007,  -28, -3293),
+    ["Marine Island"]       = Vector3.new(  28,  -33, -2418),
+    ["Pirate Island"]       = Vector3.new(-2199, -37, -2084),
+    ["Rock Island"]         = Vector3.new(-6119,  13,  1117),
+    ["Snow Island"]         = Vector3.new(-3991, -13, -4352),
+    ["Desert Island"]       = Vector3.new(-2520, -32, -6287),
+    ["Sky Island"]          = Vector3.new( -440, 792, -8363),
+    ["Dark Castle"]         = Vector3.new(-6209,   1, -8061),
+}
+
+local TeleportBox = Tabs.Teleport:AddLeftGroupbox("Teleport")
+
+local IslandDropdown = TeleportBox:AddDropdown("SelectIsland", {
+    Values = {
+        "Starter Island", "Lonely Island",    "Mysterious Tower",    "Floating Restaurant",
+        "Sea Beast Island", "Legend Town",    "Jungle Island",       "Marine Island",
+        "Pirate Island",  "Rock Island",      "Snow Island",         "Desert Island",
+        "Sky Island",     "Dark Castle",
+    },
+    Default = 1,
+    Text    = "Select Island",
+})
+
+TeleportBox:AddButton({
+    Text = "Teleport to Island",
+    Func = function()
+        local coords = IslandCoords[IslandDropdown.Value]
+        if coords then
+            teleport(coords.X, coords.Y, coords.Z)
+        end
+    end,
+})
+
+-- ──────────────────────────────────────────────
+-- Configuration Tab
+-- ──────────────────────────────────────────────
+
+SaveManager:BuildConfigSection(Tabs.Configuration)
 
 -- ──────────────────────────────────────────────
 -- Init
