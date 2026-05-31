@@ -361,11 +361,7 @@ local function getAvailablePoints()
 end
 
 local function fireHakiRemote()
-    local id = capturedIds["Haki"]
-    if not id then
-        Library:Notify("Haki: Use it manually once to register its ID!")
-        return
-    end
+    local id = capturedIds["Haki"] or "92935"
     local args = {
         buffer.fromstring("\t"),
         "\001",
@@ -522,10 +518,7 @@ end)
 
 local function fireSkillZ(pos)
     local id = capturedIds["Thousand Slices"]
-    if not id then
-        Library:Notify("Skill Z: Use it manually once to register its ID!")
-        return
-    end
+    if not id then return end
     local args = {
         buffer.fromstring("\005"),
         "\001",
@@ -545,10 +538,7 @@ end
 
 local function fireSkillX(pos)
     local id = capturedIds["Strongest Slash"]
-    if not id then
-        Library:Notify("Skill X: Use it manually once to register its ID!")
-        return
-    end
+    if not id then return end
     local args = {
         buffer.fromstring("\005"),
         "\001",
@@ -571,13 +561,17 @@ local function runKillLoop(shouldContinue, lockedCfg)
     local pos  = PositionDropdown.Value
     local char = LocalPlayer.Character
     local hum  = char and char:FindFirstChildOfClass("Humanoid")
-    local hrp  = getHRP()
-
-    if hum then
-        if pos == "Below" or pos == "Above" then hum.AutoRotate = false end
-        hum:ChangeState(Enum.HumanoidStateType.Physics)
+    if hum and (pos == "Below" or pos == "Above") then
+        hum.AutoRotate = false
     end
-    if hrp then hrp.Anchored = true end
+
+    local velConn = game:GetService("RunService").Heartbeat:Connect(function()
+        local hrp = getHRP()
+        if hrp then
+            hrp.AssemblyLinearVelocity  = Vector3.zero
+            hrp.AssemblyAngularVelocity = Vector3.zero
+        end
+    end)
 
     while isFarming() and shouldContinue() do
         local mobs   = getMobs(lockedCfg)
@@ -585,7 +579,7 @@ local function runKillLoop(shouldContinue, lockedCfg)
         for _, mob in ipairs(mobs) do
             if mob and isAlive(mob) then target = mob break end
         end
-        hrp = getHRP()
+        local hrp = getHRP()
         if hrp and target then
             local mobHRP = target:FindFirstChild("HumanoidRootPart")
             if mobHRP then hrp.CFrame = getTargetCFrame(mobHRP) end
@@ -593,16 +587,8 @@ local function runKillLoop(shouldContinue, lockedCfg)
         task.wait()
     end
 
-    hrp = getHRP()
-    if hrp then
-        hrp.Anchored               = false
-        hrp.AssemblyLinearVelocity  = Vector3.zero
-        hrp.AssemblyAngularVelocity = Vector3.zero
-    end
-    if hum then
-        hum.AutoRotate = true
-        hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-    end
+    velConn:Disconnect()
+    if hum then hum.AutoRotate = true end
 end
 
 -- ──────────────────────────────────────────────
@@ -833,33 +819,29 @@ local function lockAndKill(getMobFn)
     local pos  = PositionDropdown.Value
     local char = LocalPlayer.Character
     local hum  = char and char:FindFirstChildOfClass("Humanoid")
-    local h    = getHRP()
-
-    if hum then
-        if pos == "Below" or pos == "Above" then hum.AutoRotate = false end
-        hum:ChangeState(Enum.HumanoidStateType.Physics)
+    if hum and (pos == "Below" or pos == "Above") then
+        hum.AutoRotate = false
     end
-    if h then h.Anchored = true end
+
+    local velConn = game:GetService("RunService").Heartbeat:Connect(function()
+        local h = getHRP()
+        if h then
+            h.AssemblyLinearVelocity  = Vector3.zero
+            h.AssemblyAngularVelocity = Vector3.zero
+        end
+    end)
 
     while AutoBossToggle.Value do
         local mob = getMobFn()
         if not mob or not isAlive(mob) then break end
         local mobHRP = mob:FindFirstChild("HumanoidRootPart")
-        h = getHRP()
+        local h = getHRP()
         if h and mobHRP then h.CFrame = getTargetCFrame(mobHRP) end
         task.wait()
     end
 
-    h = getHRP()
-    if h then
-        h.Anchored               = false
-        h.AssemblyLinearVelocity  = Vector3.zero
-        h.AssemblyAngularVelocity = Vector3.zero
-    end
-    if hum then
-        hum.AutoRotate = true
-        hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-    end
+    velConn:Disconnect()
+    if hum then hum.AutoRotate = true end
 end
 
 local function bossLoop()
