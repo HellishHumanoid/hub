@@ -53,6 +53,13 @@ local BossDropdown = BossBox:AddDropdown("BossSelect", {
     Text    = "Boss",
 })
 
+local BossHopBox = Tabs.Farm:AddLeftGroupbox("Auto Boss Hop")
+
+local AutoBossHopToggle = BossHopBox:AddToggle("AutoBossHop", {
+    Text    = "Auto-Boss Hop",
+    Default = false,
+})
+
 local FarmModeDropdown = FarmBox:AddDropdown("FarmMode", {
     Values = {
         "Lv. 0-25",    "Lv. 25-50",   "Lv. 50-75",   "Lv. 75-100",
@@ -417,7 +424,7 @@ local function getTargetCFrame(mobHRP)
 end
 
 local function isFarming()
-    return AutoQuestToggle.Value or AutoLevelToggle.Value or AutoBossToggle.Value
+    return AutoQuestToggle.Value or AutoLevelToggle.Value or AutoBossToggle.Value or AutoBossHopToggle.Value
 end
 
 -- Returns the position of whichever mob/boss we're currently locked on
@@ -822,6 +829,134 @@ AutoBossToggle:OnChanged(function()
         task.spawn(function()
             bossLoop()
             bossActive = false
+        end)
+    else
+        task.wait(0.3)
+        local char = LocalPlayer.Character
+        local hum  = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then hum.AutoRotate = true end
+        local hrp = getHRP()
+        if hrp then
+            hrp.AssemblyLinearVelocity  = Vector3.zero
+            hrp.AssemblyAngularVelocity = Vector3.zero
+            if preFarmCFrame then hrp.CFrame = preFarmCFrame end
+        end
+    end
+end)
+
+-- ──────────────────────────────────────────────
+-- Auto-Boss Hop
+-- ──────────────────────────────────────────────
+
+local function queueReexecute()
+    if queue_on_teleport then
+        queue_on_teleport('loadstring(game:HttpGet("https://raw.githubusercontent.com/HellishHumanoid/hub/refs/heads/main/lp"))()')
+    end
+end
+
+local function serverHop()
+    local TeleportService = game:GetService("TeleportService")
+    local HttpService     = game:GetService("HttpService")
+    -- Try to find a different public server to join
+    local ok, result = pcall(function()
+        local data = HttpService:JSONDecode(game:HttpGet(
+            "https://games.roblox.com/v1/games/" .. game.PlaceId ..
+            "/servers/Public?sortOrder=Asc&limit=100"
+        ))
+        for _, server in ipairs(data.data or {}) do
+            if server.id ~= game.JobId and server.playing < server.maxPlayers then
+                TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id, LocalPlayer)
+                return true
+            end
+        end
+        return false
+    end)
+    if not ok or not result then
+        -- Fallback: rejoin any server
+        pcall(function()
+            TeleportService:Teleport(game.PlaceId, LocalPlayer)
+        end)
+    end
+end
+
+local function waitForGameLoad()
+    -- Wait until the mobs folder exists and character is ready
+    while not pcall(function() return workspace.Holder.Mobs end) do
+        task.wait(1)
+    end
+    task.wait(2) -- small extra buffer
+end
+
+local bossHopActive = false
+
+local function bossHopLoop()
+    waitForGameLoad()
+
+    while AutoBossHopToggle.Value do
+        local cfg = BossConfig[BossDropdown.Value]
+        if not cfg then task.wait(1) continue end
+
+        pcall(equipWeapon)
+        teleport(cfg.coords.X, cfg.coords.Y, cfg.coords.Z)
+        task.wait(3) -- give time for boss to appear
+
+        local boss = getBoss()
+        if not boss or not isAlive(boss) then
+            Library:Notify("Boss not found — server hopping...")
+            queueReexecute()
+            serverHop()
+            task.wait(15) -- wait for teleport
+            continue
+        end
+
+        Library:Notify("Boss found! Killing " .. cfg.mobName)
+
+        -- Lock on and kill boss fully
+        local pos  = PositionDropdown.Value
+        local char = LocalPlayer.Character
+        local hum  = char and char:FindFirstChildOfClass("Humanoid")
+        if hum and (pos == "Below" or pos == "Above") then
+            hum.AutoRotate = false
+        end
+
+        local velConn = game:GetService("RunService").Heartbeat:Connect(function()
+            local hrp2 = getHRP()
+            if hrp2 then
+                hrp2.AssemblyLinearVelocity  = Vector3.zero
+                hrp2.AssemblyAngularVelocity = Vector3.zero
+            end
+        end)
+
+        while AutoBossHopToggle.Value and boss and isAlive(boss) do
+            local bossHRP = boss:FindFirstChild("HumanoidRootPart")
+            local hrp2 = getHRP()
+            if hrp2 and bossHRP then
+                hrp2.CFrame = getTargetCFrame(bossHRP)
+            end
+            task.wait()
+        end
+
+        velConn:Disconnect()
+        if hum then hum.AutoRotate = true end
+
+        if not AutoBossHopToggle.Value then break end
+
+        -- Boss killed, hop to next server for another attempt
+        Library:Notify("Boss killed! Server hopping...")
+        task.wait(1)
+        queueReexecute()
+        serverHop()
+        task.wait(15)
+    end
+end
+
+AutoBossHopToggle:OnChanged(function()
+    if AutoBossHopToggle.Value then
+        if bossHopActive then return end
+        bossHopActive = true
+        task.spawn(function()
+            bossHopLoop()
+            bossHopActive = false
         end)
     else
         task.wait(0.3)
