@@ -724,14 +724,21 @@ end)
 local BossConfig = {
     ["Red Haired Emperor"]  = { coords = Vector3.new(-6230,  15,  1149), folder = "Rock Island",      mobName = "Red Haired Emperor"    },
     ["Guardian of The Seas"]= { coords = Vector3.new( 4256,  47, -1802), folder = "Sea Beast Island", mobName = "Guardian of The Seas"  },
-    ["Sea Beast"]           = { coords = Vector3.new(4256, 47, -1802), folder = "Sea Beast Island", mobName = "Sea Beast" },
+    ["Sea Beast"]           = { seaBeast = true },
 }
 
 local bossActive = false
 
+local function getOrbCount()
+    local ok, val = pcall(function()
+        return LocalPlayer.Data.Inventory["Sea Beast's Orb"]:GetAttribute("Amount")
+    end)
+    return (ok and tonumber(val)) or 0
+end
+
 local function getBoss()
     local cfg = BossConfig[BossDropdown.Value]
-    if not cfg then return nil end
+    if not cfg or cfg.seaBeast then return nil end
     local ok, folder = pcall(function()
         return workspace.Holder.Mobs[cfg.folder]
     end)
@@ -776,6 +783,71 @@ local function bossLoop()
     while AutoBossToggle.Value do
         local cfg = BossConfig[BossDropdown.Value]
         if not cfg then task.wait(1) continue end
+
+        -- ── Sea Beast flow ───────────────────────────
+        if cfg.seaBeast then
+            local guardianCfg = BossConfig["Guardian of The Seas"]
+
+            -- If Sea Beast is already spawned, kill it first
+            local existingBeast = nil
+            pcall(function() existingBeast = workspace.Holder.Mobs["Sea Beast Island"]["Sea Beast"] end)
+            if existingBeast and isAlive(existingBeast) then
+                Library:Notify("Sea Beast already up — killing!")
+                lockAndKill(function()
+                    local ok, mob = pcall(function() return workspace.Holder.Mobs["Sea Beast Island"]["Sea Beast"] end)
+                    return ok and mob or nil
+                end)
+                task.wait(1)
+                continue
+            end
+
+            -- Phase 1: kill Guardians until orb drops
+            local orbsBefore = getOrbCount()
+            Library:Notify("Sea Beast: farming Guardian for orb...")
+            pcall(equipWeapon)
+            teleport(guardianCfg.coords.X, guardianCfg.coords.Y, guardianCfg.coords.Z)
+            task.wait(1.5)
+
+            lockAndKill(function()
+                if getOrbCount() > orbsBefore then return nil end
+                if BossDropdown.Value ~= "Sea Beast" then return nil end
+                local ok, folder = pcall(function() return workspace.Holder.Mobs[guardianCfg.folder] end)
+                return ok and folder and folder:FindFirstChild(guardianCfg.mobName)
+            end)
+
+            if not AutoBossToggle.Value or BossDropdown.Value ~= "Sea Beast" then break end
+
+            -- Phase 2: redeem orb, equip it, spawn Sea Beast
+            Library:Notify("Sea Beast: orb obtained! Spawning...")
+            teleport(4171, 50, -2035)
+            task.wait(2)
+            Reliable:FireServer(buffer.fromstring("."), { { "Sea Beast's Orb" } })
+            task.wait(1)
+
+            local char = LocalPlayer.Character
+            if char then
+                local hum = char:FindFirstChildOfClass("Humanoid")
+                local orb = LocalPlayer.Backpack:FindFirstChild("Sea Beast's Orb")
+                if hum and orb then hum:EquipTool(orb) end
+            end
+            task.wait(0.5)
+
+            local ok, seaBeast = pcall(function() return workspace.Holder.Mobs["Sea Beast Island"]["Sea Beast"] end)
+            if ok and seaBeast then
+                Request:FireServer(buffer.fromstring("\026"), "\001", { { "1", { seaBeast } } })
+            end
+            task.wait(2)
+
+            -- Phase 3: kill Sea Beast
+            Library:Notify("Sea Beast: spawned! Killing...")
+            lockAndKill(function()
+                local ok2, mob = pcall(function() return workspace.Holder.Mobs["Sea Beast Island"]["Sea Beast"] end)
+                return ok2 and mob or nil
+            end)
+
+            task.wait(1)
+            continue
+        end
 
         -- ── Normal boss flow ────────────────────────
         pcall(equipWeapon)
