@@ -54,7 +54,7 @@ local AutoBossToggle = BossBox:AddToggle("AutoBoss", {
 })
 
 local BossDropdown = BossBox:AddDropdown("BossSelect", {
-    Values  = { "Red Haired Emperor", "Guardian of The Seas" },
+    Values  = { "Red Haired Emperor", "Guardian of The Seas", "Sea Beast" },
     Default = 1,
     Text    = "Boss",
 })
@@ -626,13 +626,12 @@ end
 
 task.spawn(function()
     while true do
-        task.wait(10)
+        task.wait(1)
         if not AutoSkillToggle.Value then continue end
         if not isDarkBladeEquipped() then continue end
-        if not isFarming() then continue end -- only fire when locked on something
+        if not isFarming() then continue end
 
         local pos = getCurrentTargetPos()
-        -- If pos is zero vector there's no live target, skip
         if pos == Vector3.new(0, 0, 0) then continue end
 
         local selected = SkillDropdown.Value
@@ -796,20 +795,87 @@ end)
 -- ──────────────────────────────────────────────
 
 local BossConfig = {
-    ["Red Haired Emperor"]    = { coords = Vector3.new(-6230,  15,  1149), folder = "Rock Island",       mobName = "Red Haired Emperor"    },
-    ["Guardian of The Seas"]= { coords = Vector3.new( 4256,  47, -1802), folder = "Sea Beast Island",  mobName = "Guardian of The Seas" },
+    ["Red Haired Emperor"]  = { coords = Vector3.new(-6230,  15,  1149), folder = "Rock Island",      mobName = "Red Haired Emperor"    },
+    ["Guardian of The Seas"]= { coords = Vector3.new( 4256,  47, -1802), folder = "Sea Beast Island", mobName = "Guardian of The Seas"  },
+    ["Sea Beast"]           = { seaBeast = true },
 }
 
 local bossActive = false
 
 local function getBoss()
     local cfg = BossConfig[BossDropdown.Value]
-    if not cfg then return nil end
+    if not cfg or cfg.seaBeast then return nil end
     local ok, folder = pcall(function()
         return workspace.Holder.Mobs[cfg.folder]
     end)
     if not ok or not folder then return nil end
     return folder:FindFirstChild(cfg.mobName)
+end
+
+-- Sea Beast helpers
+local function getOrbCount()
+    local ok, val = pcall(function()
+        return LocalPlayer.Data.Inventory["Sea Beast's Orb"]:GetAttribute("Amount")
+    end)
+    return (ok and tonumber(val)) or 0
+end
+
+local function fireRedeemOrbRemote()
+    local args = { buffer.fromstring("."), { { "Sea Beast's Orb" } } }
+    Reliable:FireServer(unpack(args))
+end
+
+local function equipOrb()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+    local tool = LocalPlayer.Backpack:FindFirstChild("Sea Beast's Orb")
+    if tool then hum:EquipTool(tool) end
+end
+
+local function fireSeaBeastSpawnRemote()
+    local ok, seaBeast = pcall(function()
+        return workspace.Holder.Mobs["Sea Beast Island"]["Sea Beast"]
+    end)
+    if not ok or not seaBeast then return end
+    local args = {
+        buffer.fromstring("\026"),
+        "\001",
+        {
+            {
+                "71990", -- session-based ID, update if needed
+                { seaBeast }
+            }
+        }
+    }
+    Request:FireServer(unpack(args))
+end
+
+local function lockAndKill(getMobFn)
+    local pos  = PositionDropdown.Value
+    local char = LocalPlayer.Character
+    local hum  = char and char:FindFirstChildOfClass("Humanoid")
+    if hum and (pos == "Below" or pos == "Above") then
+        hum.AutoRotate = false
+    end
+    local velConn = game:GetService("RunService").Heartbeat:Connect(function()
+        local h = getHRP()
+        if h then
+            h.AssemblyLinearVelocity  = Vector3.zero
+            h.AssemblyAngularVelocity = Vector3.zero
+        end
+    end)
+    while AutoBossToggle.Value do
+        local mob = getMobFn()
+        if not mob or not isAlive(mob) then break end
+        local mobHRP = mob:FindFirstChild("HumanoidRootPart")
+        local h = getHRP()
+        if h and mobHRP then h.CFrame = getTargetCFrame(mobHRP) end
+        task.wait()
+    end
+    velConn:Disconnect()
+    if hum then hum.AutoRotate = true end
 end
 
 local function bossLoop()
@@ -820,41 +886,65 @@ local function bossLoop()
         local cfg = BossConfig[BossDropdown.Value]
         if not cfg then task.wait(1) continue end
 
+        -- ── Sea Beast special flow ──────────────────
+        if cfg.seaBeast then
+            local guardianCfg = BossConfig["Guardian of The Seas"]
+            local orbsBefore  = getOrbCount()
+
+            -- Phase 1: kill Guardians until orb drops
+            Library:Notify("Sea Beast: Farming Guardian for orb...")
+            pcall(equipWeapon)
+            teleport(guardianCfg.coords.X, guardianCfg.coords.Y, guardianCfg.coords.Z)
+            task.wait(1.5)
+
+            while AutoBossToggle.Value and BossDropdown.Value == "Sea Beast" do
+                if getOrbCount() > orbsBefore then break end
+                local guardian = (function()
+                    local ok, folder = pcall(function() return workspace.Holder.Mobs[guardianCfg.folder] end)
+                    if not ok or not folder then return nil end
+                    return folder:FindFirstChild(guardianCfg.mobName)
+                end)()
+                if guardian and isAlive(guardian) then
+                    local gHRP = guardian:FindFirstChild("HumanoidRootPart")
+                    local h = getHRP()
+                    if h and gHRP then h.CFrame = getTargetCFrame(gHRP) end
+                end
+                task.wait()
+            end
+
+            if not AutoBossToggle.Value or BossDropdown.Value ~= "Sea Beast" then break end
+
+            -- Phase 2: redeem orb, equip it, spawn Sea Beast
+            Library:Notify("Sea Beast: Orb obtained! Redeeming...")
+            teleport(4171, 50, -2035)
+            task.wait(2)
+            pcall(fireRedeemOrbRemote)
+            task.wait(1)
+            pcall(equipOrb)
+            task.wait(0.5)
+            pcall(fireSeaBeastSpawnRemote)
+            task.wait(2)
+
+            -- Phase 3: kill Sea Beast
+            Library:Notify("Sea Beast: Spawned! Killing...")
+            lockAndKill(function()
+                local ok, mob = pcall(function()
+                    return workspace.Holder.Mobs["Sea Beast Island"]["Sea Beast"]
+                end)
+                return ok and mob or nil
+            end)
+
+            task.wait(1)
+            continue
+        end
+
+        -- ── Normal boss flow ────────────────────────
         pcall(equipWeapon)
         teleport(cfg.coords.X, cfg.coords.Y, cfg.coords.Z)
         task.wait(1.5)
 
-        -- Lock onto boss until dead or toggle off
-        local pos  = PositionDropdown.Value
-        local char = LocalPlayer.Character
-        local hum  = char and char:FindFirstChildOfClass("Humanoid")
-        if hum and (pos == "Below" or pos == "Above") then
-            hum.AutoRotate = false
-        end
+        lockAndKill(getBoss)
 
-        local velConn = game:GetService("RunService").Heartbeat:Connect(function()
-            local hrp2 = getHRP()
-            if hrp2 then
-                hrp2.AssemblyLinearVelocity  = Vector3.zero
-                hrp2.AssemblyAngularVelocity = Vector3.zero
-            end
-        end)
-
-        while AutoBossToggle.Value do
-            local boss = getBoss()
-            if not boss or not isAlive(boss) then break end
-            local bossHRP = boss:FindFirstChild("HumanoidRootPart")
-            local hrp2 = getHRP()
-            if hrp2 and bossHRP then
-                hrp2.CFrame = getTargetCFrame(bossHRP)
-            end
-            task.wait()
-        end
-
-        velConn:Disconnect()
-        if hum then hum.AutoRotate = true end
-
-        -- Boss is dead, wait a bit before trying again
         task.wait(3)
     end
 end
