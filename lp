@@ -361,12 +361,17 @@ local function getAvailablePoints()
 end
 
 local function fireHakiRemote()
+    local id = capturedIds["Haki"]
+    if not id then
+        Library:Notify("Haki: Use it manually once to register its ID!")
+        return
+    end
     local args = {
         buffer.fromstring("\t"),
         "\001",
         {
             {
-                "92935",
+                id,
                 {}
             }
         }
@@ -480,47 +485,49 @@ getCurrentTargetPos = function()
     return Vector3.new(0, 0, 0)
 end
 
-local function getEntityId()
-    local char = LocalPlayer.Character
-    if not char then return nil end
+-- Auto-captured skill/haki entity IDs — populated when the game fires them
+local capturedIds = {
+    ["Thousand Slices"]  = nil,
+    ["Strongest Slash"]  = nil,
+    ["Haki"]             = nil,
+}
 
-    -- Check character attributes
-    for k, v in pairs(char:GetAttributes()) do
-        return tostring(v) -- return the first attribute value found
-    end
-
-    -- Check HRP attributes
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if hrp then
-        for k, v in pairs(hrp:GetAttributes()) do
-            return tostring(v)
-        end
-    end
-
-    -- Check all IntValue / NumberValue / StringValue descendants
-    for _, v in ipairs(char:GetDescendants()) do
-        if v:IsA("IntValue") or v:IsA("NumberValue") or v:IsA("StringValue") then
-            local val = tostring(v.Value)
-            -- Entity IDs are typically 4-6 digit numbers
-            if val:match("^%d+$") and #val >= 4 and #val <= 6 then
-                return val
+-- Hook Request:FireServer to silently capture IDs as the game uses them
+pcall(function()
+    local mt  = getrawmetatable(game)
+    local old = mt.__namecall
+    setreadonly(mt, false)
+    mt.__namecall = newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        if method == "FireServer" and self == Request then
+            local ok, args = pcall(function() return {...} end)
+            if ok and args then
+                local buf = args[1]
+                local inner = type(args[3]) == "table" and type(args[3][1]) == "table" and args[3][1]
+                if inner and type(inner[1]) == "string" then
+                    local data = inner[2]
+                    -- Skill remote: buf \005, data has { "ChargeSkill", skillName, vec }
+                    if type(data) == "table" and data[1] == "ChargeSkill" and type(data[2]) == "string" then
+                        capturedIds[data[2]] = inner[1]
+                    end
+                    -- Haki remote: buf \t (byte 9), data is {}
+                    if type(buf) == "buffer" and buffer.len(buf) == 1 and buffer.readu8(buf, 0) == 9 then
+                        capturedIds["Haki"] = inner[1]
+                    end
+                end
             end
         end
-    end
-
-    -- Check workspace.Holder for a player entity entry
-    local ok, id = pcall(function()
-        return tostring(workspace.Holder:FindFirstChild(LocalPlayer.Name):GetAttribute("EntityId"))
+        return old(self, ...)
     end)
-    if ok and id and id ~= "nil" then return id end
-
-    return nil
-end
+    setreadonly(mt, true)
+end)
 
 local function fireSkillZ(pos)
-    local id = getEntityId()
-    Library:Notify(id and ("Skill Z fired | ID: " .. id) or "Skill Z: entity ID not found!")
-    if not id then return end
+    local id = capturedIds["Thousand Slices"]
+    if not id then
+        Library:Notify("Skill Z: Use it manually once to register its ID!")
+        return
+    end
     local args = {
         buffer.fromstring("\005"),
         "\001",
@@ -539,8 +546,11 @@ local function fireSkillZ(pos)
 end
 
 local function fireSkillX(pos)
-    local id = getEntityId()
-    if not id then return end
+    local id = capturedIds["Strongest Slash"]
+    if not id then
+        Library:Notify("Skill X: Use it manually once to register its ID!")
+        return
+    end
     local args = {
         buffer.fromstring("\005"),
         "\001",
@@ -929,20 +939,13 @@ local function bossLoop()
             teleport(guardianCfg.coords.X, guardianCfg.coords.Y, guardianCfg.coords.Z)
             task.wait(1.5)
 
-            while AutoBossToggle.Value and BossDropdown.Value == "Sea Beast" do
-                if getOrbCount() > orbsBefore then break end
-                local guardian = (function()
-                    local ok, folder = pcall(function() return workspace.Holder.Mobs[guardianCfg.folder] end)
-                    if not ok or not folder then return nil end
-                    return folder:FindFirstChild(guardianCfg.mobName)
-                end)()
-                if guardian and isAlive(guardian) then
-                    local gHRP = guardian:FindFirstChild("HumanoidRootPart")
-                    local h = getHRP()
-                    if h and gHRP then h.CFrame = getTargetCFrame(gHRP) end
-                end
-                task.wait()
-            end
+            lockAndKill(function()
+                if getOrbCount() > orbsBefore then return nil end
+                if BossDropdown.Value ~= "Sea Beast" then return nil end
+                local ok, folder = pcall(function() return workspace.Holder.Mobs[guardianCfg.folder] end)
+                if not ok or not folder then return nil end
+                return folder:FindFirstChild(guardianCfg.mobName)
+            end)
 
             if not AutoBossToggle.Value or BossDropdown.Value ~= "Sea Beast" then break end
 
