@@ -604,9 +604,6 @@ end)
 
 AutoHakiToggle:OnChanged(function()
     if AutoHakiToggle.Value then
-        if not capturedIds["Haki"] then
-            Library:Notify("Auto-Haki: Use Haki once manually to register its ID!")
-        end
         pcall(fireHakiRemote)
     end
 end)
