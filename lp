@@ -498,26 +498,24 @@ pcall(function()
     local old = mt.__namecall
     setreadonly(mt, false)
     mt.__namecall = newcclosure(function(self, ...)
+        local args = {...} -- capture varargs before any inner functions
         local method = getnamecallmethod()
         if method == "FireServer" and self == Request then
-            local ok, args = pcall(function() return {...} end)
-            if ok and args then
-                local buf = args[1]
-                local inner = type(args[3]) == "table" and type(args[3][1]) == "table" and args[3][1]
-                if inner and type(inner[1]) == "string" then
-                    local data = inner[2]
-                    -- Skill remote: buf \005, data has { "ChargeSkill", skillName, vec }
-                    if type(data) == "table" and data[1] == "ChargeSkill" and type(data[2]) == "string" then
-                        capturedIds[data[2]] = inner[1]
-                    end
-                    -- Haki remote: buf \t (byte 9), data is {}
-                    if type(buf) == "buffer" and buffer.len(buf) == 1 and buffer.readu8(buf, 0) == 9 then
-                        capturedIds["Haki"] = inner[1]
-                    end
+            local buf   = args[1]
+            local inner = type(args[3]) == "table" and type(args[3][1]) == "table" and args[3][1]
+            if inner and type(inner[1]) == "string" then
+                local data = inner[2]
+                -- Skill remote: buf \005, data = { "ChargeSkill", skillName, vec }
+                if type(data) == "table" and data[1] == "ChargeSkill" and type(data[2]) == "string" then
+                    capturedIds[data[2]] = inner[1]
+                end
+                -- Haki remote: buf \t (byte 9)
+                if type(buf) == "buffer" and buffer.len(buf) == 1 and buffer.readu8(buf, 0) == 9 then
+                    capturedIds["Haki"] = inner[1]
                 end
             end
         end
-        return old(self, ...)
+        return old(self, unpack(args))
     end)
     setreadonly(mt, true)
 end)
