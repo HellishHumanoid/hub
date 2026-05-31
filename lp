@@ -361,18 +361,7 @@ local function getAvailablePoints()
 end
 
 local function fireHakiRemote()
-    local id = capturedIds["Haki"] or "86862"
-    local args = {
-        buffer.fromstring("\t"),
-        "\001",
-        {
-            {
-                id,
-                {}
-            }
-        }
-    }
-    Request:FireServer(unpack(args))
+    Request:FireServer(buffer.fromstring("\t"), "\001", { { "1", {} } })
 end
 
 local function fireStatRemote()
@@ -481,86 +470,12 @@ getCurrentTargetPos = function()
     return Vector3.new(0, 0, 0)
 end
 
--- Auto-captured skill/haki entity IDs — populated when the game fires them
-local capturedIds = {
-    ["Thousand Slices"]  = nil,
-    ["Strongest Slash"]  = nil,
-    ["Haki"]             = nil,
-}
-
--- Hook Request:FireServer to silently capture session IDs
-local function tryCapture(buf, a3)
-    local inner = type(a3) == "table" and type(a3[1]) == "table" and a3[1]
-    if not inner or type(inner[1]) ~= "string" then return end
-    local data = inner[2]
-    if type(data) == "table" and data[1] == "ChargeSkill" and type(data[2]) == "string" then
-        capturedIds[data[2]] = inner[1]
-    end
-    if type(buf) == "buffer" and buffer.len(buf) == 1 and buffer.readu8(buf, 0) == 9 then
-        capturedIds["Haki"] = inner[1]
-    end
-end
-
-pcall(function()
-    if hookmetamethod then
-        hookmetamethod(game, "__namecall", function(self, ...)
-            if getnamecallmethod() == "FireServer" and self == Request then
-                local a1, _, a3 = ...
-                tryCapture(a1, a3)
-            end
-            return hookmetamethod(game, "__namecall")(self, ...)
-        end)
-    else
-        local mt  = getrawmetatable(game)
-        local old = mt.__namecall
-        setreadonly(mt, false)
-        mt.__namecall = function(self, ...)
-            if getnamecallmethod() == "FireServer" and self == Request then
-                local a1, _, a3 = ...
-                tryCapture(a1, a3)
-            end
-            return old(self, ...)
-        end
-        setreadonly(mt, true)
-    end
-end)
-
 local function fireSkillZ(pos)
-    local id = capturedIds["Thousand Slices"] or "68921"
-    local args = {
-        buffer.fromstring("\005"),
-        "\001",
-        {
-            {
-                id,
-                {
-                    "ChargeSkill",
-                    "Thousand Slices",
-                    vector.create(pos.X, pos.Y, pos.Z)
-                }
-            }
-        }
-    }
-    Request:FireServer(unpack(args))
+    Request:FireServer(buffer.fromstring("\005"), "\001", { { "1", { "ChargeSkill", "Thousand Slices", vector.create(pos.X, pos.Y, pos.Z) } } })
 end
 
 local function fireSkillX(pos)
-    local id = capturedIds["Strongest Slash"] or "67786"
-    local args = {
-        buffer.fromstring("\005"),
-        "\001",
-        {
-            {
-                id,
-                {
-                    "ChargeSkill",
-                    "Strongest Slash",
-                    vector.create(pos.X, pos.Y, pos.Z)
-                }
-            }
-        }
-    }
-    Request:FireServer(unpack(args))
+    Request:FireServer(buffer.fromstring("\005"), "\001", { { "1", { "ChargeSkill", "Strongest Slash", vector.create(pos.X, pos.Y, pos.Z) } } })
 end
 
 -- Shared per-frame kill loop used by both quest and no-quest modes
