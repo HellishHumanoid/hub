@@ -286,19 +286,11 @@ end
 -- Helpers
 -- ──────────────────────────────────────────────
 
-local Reliable = ReplicatedStorage
-    :WaitForChild("Packages")
-    :WaitForChild("Warp")
-    :WaitForChild("Index")
-    :WaitForChild("Event")
-    :WaitForChild("Reliable")
-
-local Request = ReplicatedStorage
-    :WaitForChild("Packages")
-    :WaitForChild("Warp")
-    :WaitForChild("Index")
-    :WaitForChild("Event")
-    :WaitForChild("Request")
+local Reliable, Request
+repeat task.wait(0.5) until pcall(function()
+    Reliable = ReplicatedStorage.Packages.Warp.Index.Event.Reliable
+    Request  = ReplicatedStorage.Packages.Warp.Index.Event.Request
+end) and Reliable and Request
 
 local function getHRP()
     local char = LocalPlayer.Character
