@@ -355,11 +355,27 @@ local function fireCancelQuestRemote()
     Reliable:FireServer(unpack(args))
 end
 
+local function isDarkBladeEquipped()
+    local char = LocalPlayer.Character
+    if not char then return false end
+    for _, obj in ipairs(char:GetChildren()) do
+        if obj:IsA("Tool") and obj.Name:lower():find("dark") and obj.Name:lower():find("blade") then
+            return true
+        end
+    end
+    return false
+end
+
 local function fireM1()
     local name = getWeaponName()
     if not name then return end
-    local args = { buffer.fromstring("="), { { name } } }
-    Reliable:FireServer(unpack(args))
+    if isDarkBladeEquipped() then
+        local args = { buffer.fromstring("?"), { { "DarkBlade" } } }
+        Reliable:FireServer(unpack(args))
+    else
+        local args = { buffer.fromstring("="), { { name } } }
+        Reliable:FireServer(unpack(args))
+    end
 end
 
 local function getAvailablePoints()
@@ -542,17 +558,6 @@ task.spawn(function()
         end
     end
 end)
-
-local function isDarkBladeEquipped()
-    local char = LocalPlayer.Character
-    if not char then return false end
-    for _, obj in ipairs(char:GetChildren()) do
-        if obj:IsA("Tool") and obj.Name:lower():find("dark") and obj.Name:lower():find("blade") then
-            return true
-        end
-    end
-    return false
-end
 
 task.spawn(function()
     while true do
