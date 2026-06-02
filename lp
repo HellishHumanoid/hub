@@ -366,14 +366,25 @@ local function isDarkBladeEquipped()
     return false
 end
 
+local function makeBuf(str)
+    if buffer and buffer.fromstring then
+        return buffer.fromstring(str)
+    end
+    local b = buffer.create(#str)
+    for i = 1, #str do
+        buffer.writeu8(b, i - 1, string.byte(str, i))
+    end
+    return b
+end
+
 local function fireM1()
     local name = getWeaponName()
     if not name then return end
     if isDarkBladeEquipped() then
-        local args = { buffer.fromstring("?"), { { "DarkBlade" } } }
+        local args = { makeBuf("?"), { { "DarkBlade" } } }
         Reliable:FireServer(unpack(args))
     else
-        local args = { buffer.fromstring("="), { { name } } }
+        local args = { makeBuf("="), { { name } } }
         Reliable:FireServer(unpack(args))
     end
 end
