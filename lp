@@ -54,9 +54,10 @@ local AutoBossToggle = BossBox:AddToggle("AutoBoss", {
 })
 
 local BossDropdown = BossBox:AddDropdown("BossSelect", {
-    Values  = { "Red Haired Emperor", "Guardian of The Seas", "Sea Beast" },
-    Default = 1,
-    Text    = "Boss",
+    Values   = { "Red Haired Emperor", "Guardian of The Seas", "Sea Beast" },
+    Multi    = true,
+    Default  = {},
+    Text     = "Boss",
 })
 
 local BossHopBox = Tabs.Farm:AddLeftGroupbox("Auto Boss Hop")
@@ -67,10 +68,13 @@ local AutoBossHopToggle = BossHopBox:AddToggle("AutoBossHop", {
 })
 
 local BossHopDropdown = BossHopBox:AddDropdown("BossHopSelect", {
-    Values  = { "Red Haired Emperor", "Sea Beast" },
-    Default = 1,
-    Text    = "Boss",
+    Values   = { "Red Haired Emperor", "Sea Beast" },
+    Multi    = true,
+    Default  = {},
+    Text     = "Boss",
 })
+
+
 
 local FarmModeDropdown = FarmBox:AddDropdown("FarmMode", {
     Values = {
@@ -784,8 +788,15 @@ local function bossLoop()
     if hrp then preFarmCFrame = hrp.CFrame end
 
     while AutoBossToggle.Value do
-        local cfg = BossConfig[BossDropdown.Value]
-        if not cfg then task.wait(1) continue end
+        local selected = BossDropdown.Value
+        local anySelected = false
+        for _ in pairs(selected) do anySelected = true break end
+        if not anySelected then task.wait(1) continue end
+
+        for bossName, enabled in pairs(selected) do
+            if not enabled or not AutoBossToggle.Value then continue end
+            local cfg = BossConfig[bossName]
+            if not cfg then continue end
 
         -- ── Sea Beast flow ───────────────────────────
         if cfg.seaBeast then
@@ -811,21 +822,37 @@ local function bossLoop()
             teleport(guardianCfg.coords.X, guardianCfg.coords.Y, guardianCfg.coords.Z)
             task.wait(1.5)
 
-            while AutoBossToggle.Value and BossDropdown.Value == "Sea Beast" and getOrbCount() <= orbsBefore do
+            local function seaBeastIsAlive()
+                local ok, mob = pcall(function() return workspace.Holder.Mobs["Sea Beast Island"]["Sea Beast"] end)
+                return ok and mob and isAlive(mob)
+            end
+
+            while AutoBossToggle.Value and BossDropdown.Value["Sea Beast"] and getOrbCount() <= orbsBefore do
+                if seaBeastIsAlive() then
+                    Library:Notify("Sea Beast spawned! Killing...")
+                    lockAndKill(function()
+                        local ok, mob = pcall(function() return workspace.Holder.Mobs["Sea Beast Island"]["Sea Beast"] end)
+                        return ok and mob or nil
+                    end)
+                    break
+                end
+
                 lockAndKill(function()
-                    if BossDropdown.Value ~= "Sea Beast" then return nil end
+                    if not BossDropdown.Value["Sea Beast"] then return nil end
+                    if seaBeastIsAlive() then return nil end
                     local ok, folder = pcall(function() return workspace.Holder.Mobs[guardianCfg.folder] end)
                     return ok and folder and folder:FindFirstChild(guardianCfg.mobName)
                 end)
-                -- Guardian died but orb didn't drop yet — wait for respawn and try again
-                if getOrbCount() <= orbsBefore then
+
+                if getOrbCount() <= orbsBefore and not seaBeastIsAlive() then
                     task.wait(3)
                     teleport(guardianCfg.coords.X, guardianCfg.coords.Y, guardianCfg.coords.Z)
                     task.wait(1)
                 end
             end
 
-            if not AutoBossToggle.Value or BossDropdown.Value ~= "Sea Beast" then break end
+            if not AutoBossToggle.Value or not BossDropdown.Value["Sea Beast"] then break end
+            if not seaBeastIsAlive() and getOrbCount() <= orbsBefore then continue end
 
             -- Phase 2: teleport, redeem orb, equip, spawn Sea Beast
             Library:Notify("Sea Beast: orb obtained! Teleporting to spawn point...")
@@ -1043,23 +1070,31 @@ local function bossHopLoop()
         pcall(equipWeapon)
         local selection = BossHopDropdown.Value
 
-        if selection == "Red Haired Emperor" then
-            local cfg = BossConfig["Red Haired Emperor"]
-            teleport(cfg.coords.X, cfg.coords.Y, cfg.coords.Z)
-            task.wait(3)
-            hopKillAndHop(function()
-                local ok, folder = pcall(function() return workspace.Holder.Mobs[cfg.folder] end)
-                return ok and folder and folder:FindFirstChild(cfg.mobName)
-            end, "Red Haired Emperor")
+        local anySelected = false
+        for _ in pairs(selection) do anySelected = true break end
+        if not anySelected then task.wait(1) continue end
 
-        elseif selection == "Sea Beast" then
-            local guardianCoords = BossConfig["Guardian of The Seas"].coords
-            teleport(guardianCoords.X, guardianCoords.Y, guardianCoords.Z)
-            task.wait(3)
-            hopKillAndHop(function()
-                local ok, mob = pcall(function() return workspace.Holder.Mobs["Sea Beast Island"]["Sea Beast"] end)
-                return ok and mob or nil
-            end, "Sea Beast")
+        for bossName, enabled in pairs(selection) do
+            if not enabled or not AutoBossHopToggle.Value then continue end
+
+            if bossName == "Red Haired Emperor" then
+                local cfg = BossConfig["Red Haired Emperor"]
+                teleport(cfg.coords.X, cfg.coords.Y, cfg.coords.Z)
+                task.wait(3)
+                hopKillAndHop(function()
+                    local ok, folder = pcall(function() return workspace.Holder.Mobs[cfg.folder] end)
+                    return ok and folder and folder:FindFirstChild(cfg.mobName)
+                end, "Red Haired Emperor")
+
+            elseif bossName == "Sea Beast" then
+                local guardianCoords = BossConfig["Guardian of The Seas"].coords
+                teleport(guardianCoords.X, guardianCoords.Y, guardianCoords.Z)
+                task.wait(3)
+                hopKillAndHop(function()
+                    local ok, mob = pcall(function() return workspace.Holder.Mobs["Sea Beast Island"]["Sea Beast"] end)
+                    return ok and mob or nil
+                end, "Sea Beast")
+            end
         end
     end
 end
