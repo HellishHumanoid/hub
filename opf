@@ -1,0 +1,227 @@
+--[[
+    OPF - Tool Grab + Conditional ServerHop (auto-requeue)
+    ------------------------------------------------------
+    Button 1 "Grab Tools":
+        Grab all tools in Workspace. (No serverhop.)
+
+    Button 2 "Hop Grab Tools":
+        Grab all tools, then serverhop ONLY IF none of the target items
+        (TARGET_KEYWORDS) are present. If a target is found, stay put.
+        Auto-requeues on teleport so it keeps hopping server to server
+        until it lands on a target (executor required for requeue).
+
+    Both buttons: red = off, green = on.
+]]
+
+local Players          = game:GetService("Players")
+local TeleportService  = game:GetService("TeleportService")
+local UserInputService = game:GetService("UserInputService")
+
+local player  = Players.LocalPlayer
+local placeId = game.PlaceId
+
+--==========================================================
+-- Target list: if a Tool's name CONTAINS any of these
+-- (case-insensitive), "Hop Grab Tools" will NOT hop.
+--==========================================================
+local TARGET_KEYWORDS = {
+    "Compass", "Golden Compass", "Strange Compass",
+    "Paw", "String", "Gravity", "Plasma", "Gum", "Ope",
+    "Candy", "Chilly", "Flare", "Sand", "Magma", "Rumble",
+    "Light", "Snow", "Gas", "Dark", "Buddha", "Quake", "Phoenix",
+}
+
+--==========================================================
+-- Auto-requeue across hops (executor feature; no-op in Studio)
+-- Grabs the script source and re-runs it on the next server.
+--==========================================================
+local queueFn = (syn and syn.queue_on_teleport)
+    or (fluxus and fluxus.queue_on_teleport)
+    or queue_on_teleport
+    or (queueonteleport)
+
+local sourceText = nil
+pcall(function()
+    if debug and debug.getinfo then
+        -- Some executors expose the running source; fall back to a loader if not.
+    end
+end)
+
+--==========================================================
+-- GUI
+--==========================================================
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name           = "OPF_ToolGrabGui"
+screenGui.ResetOnSpawn   = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.Parent         = player:WaitForChild("PlayerGui")
+
+local frame = Instance.new("Frame")
+frame.Name             = "Container"
+frame.Size             = UDim2.new(0, 180, 0, 110)
+frame.Position         = UDim2.new(0, 20, 0.5, -55)
+frame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+frame.BorderSizePixel  = 0
+frame.Active           = true
+frame.Parent           = screenGui
+
+local frameCorner = Instance.new("UICorner")
+frameCorner.CornerRadius = UDim.new(0, 8)
+frameCorner.Parent = frame
+
+local function makeButton(name, text, yOffset)
+    local b = Instance.new("TextButton")
+    b.Name             = name
+    b.Size             = UDim2.new(1, -20, 0, 40)
+    b.Position         = UDim2.new(0, 10, 0, yOffset)
+    b.BackgroundColor3 = Color3.fromRGB(220, 40, 40)  -- red = off
+    b.Text             = text
+    b.TextColor3       = Color3.fromRGB(255, 255, 255)
+    b.TextSize         = 16
+    b.Font             = Enum.Font.GothamBold
+    b.AutoButtonColor  = false
+    b.Parent           = frame
+
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, 6)
+    c.Parent = b
+    return b
+end
+
+local grabButton    = makeButton("GrabToolsButton",    "Grab Tools",     10)
+local hopGrabButton = makeButton("HopGrabToolsButton", "Hop Grab Tools", 60)
+
+--==========================================================
+-- Draggable frame
+--==========================================================
+do
+    local dragging, dragStart, startPos
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+            dragging  = true
+            dragStart = input.Position
+            startPos  = frame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
+        or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            frame.Position = UDim2.new(
+                startPos.X.Scale, startPos.X.Offset + delta.X,
+                startPos.Y.Scale, startPos.Y.Offset + delta.Y
+            )
+        end
+    end)
+end
+
+--==========================================================
+-- Helpers
+--==========================================================
+local function setOn(button, isOn)
+    button.BackgroundColor3 = isOn
+        and Color3.fromRGB(40, 220, 40)   -- green = on
+        or  Color3.fromRGB(220, 40, 40)   -- red = off
+end
+
+local function grabTools()
+    local char = player.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("Tool") then
+            local handle = obj:FindFirstChild("Handle")
+            if handle then
+                handle.CFrame = root.CFrame
+            end
+        end
+    end
+end
+
+local function findTarget()
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("Tool") then
+            local lname = string.lower(obj.Name)
+            for _, kw in ipairs(TARGET_KEYWORDS) do
+                if string.find(lname, string.lower(kw), 1, true) then
+                    return true, obj.Name
+                end
+            end
+        end
+    end
+    return false
+end
+
+-- Re-run this script on the next server before teleporting, if the
+-- executor supports it. Falls back to the URL loader you paste below.
+local function requeueSelf()
+    if not queueFn then return end
+    -- GitHub raw loader: re-fetches and runs the latest copy on each hop.
+    -- Replace USER / REPO / BRANCH with your own.
+    local payload = 'loadstring(game:HttpGet("https://raw.githubusercontent.com/USER/REPO/BRANCH/OPF.lua"))()'
+    pcall(function() queueFn(payload) end)
+end
+
+local function serverHop()
+    requeueSelf()
+    local ok, err = pcall(function()
+        TeleportService:Teleport(placeId, player)
+    end)
+    if not ok then
+        warn("[OPF] Teleport failed: " .. tostring(err))
+    end
+end
+
+--==========================================================
+-- Button 1: Grab Tools only
+--==========================================================
+local grabEnabled = false
+grabButton.MouseButton1Click:Connect(function()
+    grabEnabled = not grabEnabled
+    setOn(grabButton, grabEnabled)
+    if grabEnabled then
+        grabTools()
+    end
+end)
+
+--==========================================================
+-- Button 2: Grab + hop unless a target is found (auto-requeues)
+--==========================================================
+local hopGrabEnabled = false
+
+local function runHopGrab()
+    grabTools()
+    local found, name = findTarget()
+    if found then
+        hopGrabEnabled = false
+        setOn(hopGrabButton, true)        -- leave green to show a hit
+        hopGrabButton.Text = "Found: " .. name
+        warn("[OPF] Target found (" .. name .. ") - not hopping.")
+    else
+        task.wait(5)
+        serverHop()
+    end
+end
+
+hopGrabButton.MouseButton1Click:Connect(function()
+    hopGrabEnabled = not hopGrabEnabled
+    setOn(hopGrabButton, hopGrabEnabled)
+    if hopGrabEnabled then
+        runHopGrab()
+    end
+end)
+
+-- If we just arrived from a requeued hop, resume automatically.
+if queueFn and _G.OPF_AUTORESUME then
+    hopGrabEnabled = true
+    setOn(hopGrabButton, true)
+    task.spawn(runHopGrab)
+end
+_G.OPF_AUTORESUME = true
