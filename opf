@@ -133,14 +133,20 @@ end
 local grabtoolsConn = nil
 
 local function grabTools()
+    -- Wait for character to fully load before doing anything
     local char = player.Character
-    local humanoid = char and char:FindFirstChildWhichIsA("Humanoid")
+    if not char then
+        char = player.CharacterAdded:Wait()
+    end
+    -- Also wait for the Humanoid itself to exist inside the character
+    local humanoid = char:FindFirstChildWhichIsA("Humanoid")
+        or char:WaitForChild("Humanoid", 10)
     if not humanoid then return end
 
     -- Grab everything already sitting in workspace
     for _, child in ipairs(workspace:GetChildren()) do
-        if char and child:IsA("BackpackItem") and child:FindFirstChild("Handle") then
-            humanoid:EquipTool(child)
+        if child:IsA("BackpackItem") and child:FindFirstChild("Handle") then
+            pcall(function() humanoid:EquipTool(child) end)
         end
     end
 
@@ -151,8 +157,10 @@ local function grabTools()
 
     -- Grab anything that drops in while we're on this server
     grabtoolsConn = workspace.ChildAdded:Connect(function(child)
-        if char and child:IsA("BackpackItem") and child:FindFirstChild("Handle") then
-            humanoid:EquipTool(child)
+        local c = player.Character
+        local h = c and c:FindFirstChildWhichIsA("Humanoid")
+        if h and child:IsA("BackpackItem") and child:FindFirstChild("Handle") then
+            pcall(function() h:EquipTool(child) end)
         end
     end)
 end
