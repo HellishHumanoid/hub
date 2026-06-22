@@ -132,36 +132,49 @@ end
 -- IY-style grabtools: uses EquipTool and listens for new drops
 local grabtoolsConn = nil
 
-local function grabTools()
-    -- Wait for character to fully load before doing anything
-    local char = player.Character
-    if not char then
-        char = player.CharacterAdded:Wait()
+-- Returns true if obj is already inside any player's character or backpack
+local function isOwnedByPlayer(obj)
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p.Character and obj:IsDescendantOf(p.Character) then return true end
+        local bp = p:FindFirstChild("Backpack")
+        if bp and obj:IsDescendantOf(bp) then return true end
     end
-    -- Also wait for the Humanoid itself to exist inside the character
+    return false
+end
+
+local function tryGrab(tool, humanoid)
+    if not (tool:IsA("Tool") and tool:FindFirstChild("Handle")) then return end
+    if isOwnedByPlayer(tool) then return end
+    -- Try EquipTool first; if it fails, parent directly to Backpack
+    if not pcall(function() humanoid:EquipTool(tool) end) then
+        pcall(function()
+            local bp = player:FindFirstChild("Backpack")
+            if bp then tool.Parent = bp end
+        end)
+    end
+end
+
+local function grabTools()
+    -- Wait for character and Humanoid to be ready
+    local char = player.Character or player.CharacterAdded:Wait()
     local humanoid = char:FindFirstChildWhichIsA("Humanoid")
         or char:WaitForChild("Humanoid", 10)
     if not humanoid then return end
 
-    -- Grab everything already sitting in workspace
-    for _, child in ipairs(workspace:GetChildren()) do
-        if child:IsA("BackpackItem") and child:FindFirstChild("Handle") then
-            pcall(function() humanoid:EquipTool(child) end)
-        end
+    -- Search ALL descendants of workspace, not just direct children,
+    -- so we catch tools nested inside folders/models (e.g. Blox Fruits)
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        tryGrab(obj, humanoid)
     end
 
-    -- Disconnect previous listener before making a new one
-    if grabtoolsConn then
-        grabtoolsConn:Disconnect()
-    end
+    -- Disconnect any previous listener
+    if grabtoolsConn then grabtoolsConn:Disconnect() end
 
-    -- Grab anything that drops in while we're on this server
-    grabtoolsConn = workspace.ChildAdded:Connect(function(child)
+    -- Also grab anything that appears after we arrive
+    grabtoolsConn = workspace.DescendantAdded:Connect(function(obj)
         local c = player.Character
         local h = c and c:FindFirstChildWhichIsA("Humanoid")
-        if h and child:IsA("BackpackItem") and child:FindFirstChild("Handle") then
-            pcall(function() h:EquipTool(child) end)
-        end
+        if h then tryGrab(obj, h) end
     end)
 end
 
