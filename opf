@@ -17,7 +17,13 @@ local Players          = game:GetService("Players")
 local TeleportService  = game:GetService("TeleportService")
 local UserInputService = game:GetService("UserInputService")
 
-local player  = Players.LocalPlayer
+-- Wait for LocalPlayer to be ready (needed when script fires via queue_on_teleport)
+local player = Players.LocalPlayer
+if not player then
+    Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
+    player = Players.LocalPlayer
+end
+
 local placeId = game.PlaceId
 
 --==========================================================
@@ -39,13 +45,6 @@ local queueFn = (syn and syn.queue_on_teleport)
     or (fluxus and fluxus.queue_on_teleport)
     or queue_on_teleport
     or (queueonteleport)
-
-local sourceText = nil
-pcall(function()
-    if debug and debug.getinfo then
-        -- Some executors expose the running source; fall back to a loader if not.
-    end
-end)
 
 --==========================================================
 -- GUI
@@ -130,32 +129,76 @@ local function setOn(button, isOn)
         or  Color3.fromRGB(220, 40, 40)   -- red = off
 end
 
+-- IY-style grabtools: uses EquipTool and listens for new drops
+local grabtoolsConn = nil
+
 local function grabTools()
     local char = player.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-    if not root then return end
+    local humanoid = char and char:FindFirstChildWhichIsA("Humanoid")
+    if not humanoid then return end
 
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("Tool") then
-            local handle = obj:FindFirstChild("Handle")
-            if handle then
-                handle.CFrame = root.CFrame
-            end
+    -- Grab everything already sitting in workspace
+    for _, child in ipairs(workspace:GetChildren()) do
+        if char and child:IsA("BackpackItem") and child:FindFirstChild("Handle") then
+            humanoid:EquipTool(child)
         end
+    end
+
+    -- Disconnect previous listener before making a new one
+    if grabtoolsConn then
+        grabtoolsConn:Disconnect()
+    end
+
+    -- Grab anything that drops in while we're on this server
+    grabtoolsConn = workspace.ChildAdded:Connect(function(child)
+        if char and child:IsA("BackpackItem") and child:FindFirstChild("Handle") then
+            humanoid:EquipTool(child)
+        end
+    end)
+end
+
+local function stopGrabTools()
+    if grabtoolsConn then
+        grabtoolsConn:Disconnect()
+        grabtoolsConn = nil
     end
 end
 
-local function findTarget()
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("Tool") then
-            local lname = string.lower(obj.Name)
-            for _, kw in ipairs(TARGET_KEYWORDS) do
-                if string.find(lname, string.lower(kw), 1, true) then
-                    return true, obj.Name
-                end
+-- Only checks the player's Backpack and equipped tool in Character.
+-- Ignores items still sitting in workspace that we haven't actually picked up.
+local function findTargetInInventory()
+    local function checkName(name)
+        local lname = string.lower(name)
+        for _, kw in ipairs(TARGET_KEYWORDS) do
+            if string.find(lname, string.lower(kw), 1, true) then
+                return true, name
+            end
+        end
+        return false
+    end
+
+    -- Check Backpack
+    local backpack = player:FindFirstChild("Backpack")
+    if backpack then
+        for _, item in ipairs(backpack:GetChildren()) do
+            if item:IsA("Tool") or item:IsA("BackpackItem") then
+                local found, name = checkName(item.Name)
+                if found then return true, name end
             end
         end
     end
+
+    -- Check currently equipped tool (lives inside Character)
+    local char = player.Character
+    if char then
+        for _, item in ipairs(char:GetChildren()) do
+            if item:IsA("Tool") or item:IsA("BackpackItem") then
+                local found, name = checkName(item.Name)
+                if found then return true, name end
+            end
+        end
+    end
+
     return false
 end
 
@@ -165,7 +208,7 @@ local function requeueSelf()
     if not queueFn then return end
     -- GitHub raw loader: re-fetches and runs the latest copy on each hop.
     -- Replace USER / REPO / BRANCH with your own.
-    local payload = 'loadstring(game:HttpGet("https://raw.githubusercontent.com/HellishHumanoid/hub/refs/heads/main/opf"))()'
+    local payload = '_G.OPF_AUTORESUME = true; loadstring(game:HttpGet("https://raw.githubusercontent.com/HellishHumanoid/hub/refs/heads/main/opf"))()'
     pcall(function() queueFn(payload) end)
 end
 
@@ -198,14 +241,17 @@ local hopGrabEnabled = false
 
 local function runHopGrab()
     grabTools()
-    local found, name = findTarget()
+    task.wait(2) -- brief wait for EquipTool to settle before checking inventory
+    local found, name = findTargetInInventory()
     if found then
+        stopGrabTools()
         hopGrabEnabled = false
         setOn(hopGrabButton, true)        -- leave green to show a hit
         hopGrabButton.Text = "Found: " .. name
-        warn("[OPF] Target found (" .. name .. ") - not hopping.")
+        warn("[OPF] Target found in inventory (" .. name .. ") - not hopping.")
     else
-        task.wait(5)
+        stopGrabTools()
+        task.wait(3)
         serverHop()
     end
 end
