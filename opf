@@ -165,7 +165,7 @@ local function requeueSelf()
     if not queueFn then return end
     -- GitHub raw loader: re-fetches and runs the latest copy on each hop.
     -- Replace USER / REPO / BRANCH with your own.
-    local payload = 'loadstring(game:HttpGet("https://raw.githubusercontent.com/USER/REPO/BRANCH/OPF.lua"))()'
+    local payload = 'loadstring(game:HttpGet("https://raw.githubusercontent.com/HellishHumanoid/hub/refs/heads/main/opf"))()'
     pcall(function() queueFn(payload) end)
 end
 
